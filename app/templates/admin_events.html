@@ -1,0 +1,8 @@
+{% extends "base.html" %}
+{% block content %}
+<h1>Disaster Events</h1>
+<div class="grid">
+<form method="post" class="card"><h2>Create event</h2><label>Short code *</label><input name="code" placeholder="RF" required><label>Name *</label><input name="name" placeholder="Rasuwa Flood" required><label>Type</label><input name="disaster_type" value="flood"><label>Start date *</label><input type="date" name="start_date" required><label>Affected locations</label><textarea name="affected_locations" placeholder="Rasuwa&#10;Timure&#10;Rasuwagadhi&#10;Syabrubesi"></textarea><button type="submit">Create event</button></form>
+<div class="card"><h2>Configured events</h2><p class="muted">Update affected locations as the disaster footprint changes. Use one useful search term/spelling per line.</p>{% for d in disasters %}<form method="post" action="/admin/events/{{ d.id }}/update" class="card"><strong>{{ d.code }} — {{ d.start_date }}</strong><label>Name</label><input name="name" value="{{ d.name }}"><label>Type</label><input name="disaster_type" value="{{ d.disaster_type }}"><label>Affected locations</label><textarea name="affected_locations">{{ d.affected_locations }}</textarea><label><input type="checkbox" name="active" style="width:auto" {% if d.active %}checked{% endif %}> Active</label><button>Save event</button></form>{% else %}<p>None yet.</p>{% endfor %}</div>
+</div>
+{% endblock %}

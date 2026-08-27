@@ -1,0 +1,16 @@
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.coverage
+htmlcov/
+.venv/
+.env
+*.db
+*.sqlite3
+uploads/*
+!uploads/.gitkeep
+exports/*
+!exports/.gitkeep
+.DS_Store
+.idea/
+.vscode/

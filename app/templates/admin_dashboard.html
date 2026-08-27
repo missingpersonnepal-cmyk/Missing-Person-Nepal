@@ -1,0 +1,12 @@
+{% extends "base.html" %}
+{% block content %}
+<h1>Admin Dashboard</h1>
+<div class="grid">
+  <div class="card"><div class="stats">{{ stats.people }}</div>Active master records</div>
+  <div class="card"><div class="stats">{{ stats.published }}</div>Published</div>
+  <div class="card"><div class="stats">{{ stats.pending }}</div>Pending submissions</div>
+  <div class="card"><div class="stats">{{ stats.candidates }}</div>Discovery candidates</div>
+  <div class="card"><div class="stats">{{ stats.sources }}</div>Source links</div>
+</div>
+<h2>Events</h2><div class="card">{% for d in disasters %}<p><strong>{{ d.name }}</strong> — {{ d.start_date }} — {% if d.active %}Active{% else %}Inactive{% endif %}</p>{% else %}<p>No disaster event configured. <a href="/admin/events">Create one first.</a></p>{% endfor %}</div>
+{% endblock %}

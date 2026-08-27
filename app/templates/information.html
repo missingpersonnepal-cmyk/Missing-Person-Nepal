@@ -1,0 +1,12 @@
+{% extends "base.html" %}
+{% block content %}
+<h1>Add information: {{ person.name }}</h1>
+<p>Case {{ person.case_number }}. Submitted information is reviewed before the public case changes.</p>
+{% if success %}<div class="notice">{{ success }}</div>{% endif %}
+<form method="post" class="card">
+  <label>Information / correction</label><textarea name="notes"></textarea>
+  <label>Additional public source URL</label><input type="url" name="social_url">
+  <div class="inline"><div><label>Your name (private)</label><input name="reporter_name"></div><div><label>Your phone (private)</label><input name="reporter_phone"></div></div>
+  <button type="submit">Submit information</button>
+</form>
+{% endblock %}

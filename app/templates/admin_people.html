@@ -1,0 +1,6 @@
+{% extends "base.html" %}
+{% block content %}
+<h1>Master Missing-Person Records</h1>
+<form method="get" class="card inline"><div><label>Search</label><input name="q" value="{{ q }}"></div><div><label>Event</label><select name="disaster_id"><option value="">All</option>{% for d in disasters %}<option value="{{ d.id }}" {% if selected_disaster == d.id %}selected{% endif %}>{{ d.name }}</option>{% endfor %}</select></div><div><button>Filter</button></div></form>
+<table><thead><tr><th>Case</th><th>Name</th><th>Last seen</th><th>Sources</th><th>Published</th><th></th></tr></thead><tbody>{% for p in people %}<tr><td>{{ p.case_number }}</td><td>{{ p.name }}{% if p.name_ne %}<br>{{ p.name_ne }}{% endif %}</td><td>{{ p.last_seen_location }}</td><td>{{ p.sources|length }}</td><td>{{ 'Yes' if p.published else 'No' }}{% if p.archived %} / Archived{% endif %}</td><td><a href="/admin/people/{{ p.id }}">Open</a></td></tr>{% else %}<tr><td colspan="6">No records.</td></tr>{% endfor %}</tbody></table>
+{% endblock %}

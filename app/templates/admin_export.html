@@ -1,0 +1,4 @@
+{% extends "base.html" %}
+{% block content %}
+<h1>Admin Export</h1><p>Bulk export is intentionally restricted to authenticated administrators.</p><div class="card">{% for d in disasters %}<p><strong>{{ d.name }}</strong> <a class="button" href="/admin/export/xlsx?disaster_id={{ d.id }}">XLSX</a><a class="button secondary" href="/admin/export/csv?disaster_id={{ d.id }}">CSV</a></p>{% else %}<p>No events.</p>{% endfor %}</div>
+{% endblock %}

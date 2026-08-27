@@ -1,0 +1,27 @@
+{% extends "base.html" %}
+{% block content %}
+<h1>Missing Persons</h1>
+<p class="muted">Search reports consolidated during an active disaster. Public entries have been reviewed before publication.</p>
+<form method="get" class="card">
+  <div class="inline">
+    <div><label>Name or location</label><input name="q" value="{{ q }}" placeholder="Name, Nepali name, location"></div>
+    <div><label>Location filter</label><input name="location" value="{{ location }}" placeholder="Timure, Rasuwa..."></div>
+    <div><label>Disaster</label><select name="disaster_id"><option value="">All</option>{% for d in disasters %}<option value="{{ d.id }}" {% if selected_disaster == d.id %}selected{% endif %}>{{ d.name }}</option>{% endfor %}</select></div>
+    <div><button type="submit">Search</button></div>
+  </div>
+</form>
+<p><a class="button" href="/report">Report a missing person</a></p>
+<div class="grid">
+{% for p in people %}
+  <div class="card person-card">
+    {% if p.photo_path %}<img src="/media/person/{{ p.case_number }}" alt="Submitted photo for {{ p.name }}">{% endif %}
+    <h2>{{ p.name }}</h2>
+    {% if p.name_ne %}<div>{{ p.name_ne }}</div>{% endif %}
+    <p><strong>Case:</strong> {{ p.case_number }}<br><strong>Age:</strong> {{ p.age or 'Unknown' }}<br><strong>Last seen:</strong> {{ p.last_seen_location }}{% if p.last_seen_date %}<br><strong>Date:</strong> {{ p.last_seen_date }}{% endif %}</p>
+    <a class="button" href="/person/{{ p.case_number }}">View details</a>
+  </div>
+{% else %}
+  <div class="card">No published records match this search.</div>
+{% endfor %}
+</div>
+{% endblock %}

@@ -1,0 +1,31 @@
+:root { font-family: Arial, Helvetica, sans-serif; color: #171717; background: #f5f6f8; }
+* { box-sizing: border-box; }
+body { margin: 0; }
+a { color: #0b5ed7; }
+header { background: #111827; color: white; padding: 14px 0; }
+header a { color: white; text-decoration: none; margin-right: 16px; }
+.container { width: min(1120px, 94%); margin: 0 auto; }
+main { padding: 24px 0 60px; }
+.card { background: white; border: 1px solid #ddd; border-radius: 7px; padding: 16px; margin-bottom: 14px; }
+.grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(230px, 1fr)); gap: 14px; }
+.person-card img { width: 100%; max-height: 240px; object-fit: cover; border-radius: 4px; }
+label { display: block; font-weight: 600; margin: 12px 0 5px; }
+input, select, textarea { width: 100%; padding: 9px; border: 1px solid #bbb; border-radius: 4px; font: inherit; }
+textarea { min-height: 90px; }
+button, .button { display: inline-block; background: #111827; color: white; border: 0; border-radius: 4px; padding: 9px 13px; text-decoration: none; cursor: pointer; margin: 3px 4px 3px 0; }
+.button.secondary, button.secondary { background: #4b5563; }
+.button.danger, button.danger { background: #991b1b; }
+.inline { display: flex; gap: 10px; align-items: end; flex-wrap: wrap; }
+.inline > * { flex: 1; min-width: 150px; }
+table { width: 100%; border-collapse: collapse; background: white; }
+th, td { border-bottom: 1px solid #ddd; text-align: left; padding: 9px; vertical-align: top; }
+th { background: #eee; }
+.notice { padding: 12px; background: #e8f5e9; border: 1px solid #94c99a; margin: 12px 0; }
+.error { padding: 12px; background: #fdecec; border: 1px solid #e4a2a2; margin: 12px 0; }
+.muted { color: #666; }
+.badge { display: inline-block; background: #e5e7eb; border-radius: 12px; padding: 3px 8px; font-size: .85rem; }
+.stats { font-size: 2rem; font-weight: 700; }
+pre.wrap { white-space: pre-wrap; overflow-wrap: anywhere; }
+.admin-nav { background: #e5e7eb; padding: 8px; margin-bottom: 18px; }
+.admin-nav a { margin-right: 12px; }
+@media (max-width: 640px) { th:nth-child(n+4), td:nth-child(n+4) { display: none; } }

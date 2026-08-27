@@ -1,0 +1,22 @@
+{% extends "base.html" %}
+{% block content %}
+<h1>{{ person.name }}</h1>
+{% if person.name_ne %}<h2>{{ person.name_ne }}</h2>{% endif %}
+<div class="card">
+  {% if person.photo_path %}<img src="/media/person/{{ person.case_number }}" alt="Submitted photo for {{ person.name }}" style="max-width:360px;width:100%">{% endif %}
+  <p><strong>Case:</strong> {{ person.case_number }}</p>
+  <p><strong>Age:</strong> {{ person.age or 'Unknown' }} &nbsp; <strong>Gender:</strong> {{ person.gender or 'Not provided' }}</p>
+  <p><strong>Last seen:</strong> {{ person.last_seen_location }}</p>
+  <p><strong>Date/time:</strong> {{ person.last_seen_date or 'Unknown' }} {{ person.last_seen_time or '' }}</p>
+  {% if person.clothing %}<p><strong>Clothing:</strong> {{ person.clothing }}</p>{% endif %}
+  {% if person.identification_details %}<p><strong>Identification details:</strong> {{ person.identification_details }}</p>{% endif %}
+  {% if person.public_contact_number %}<p><strong>Information contact:</strong> {{ person.public_contact_number }}</p>{% endif %}
+</div>
+<h2>Report sources</h2>
+<div class="card">
+{% for s in person.sources %}
+  <p><span class="badge">{{ s.platform }}</span> <a href="{{ s.url }}" rel="noopener noreferrer" target="_blank">Original source</a>{% if s.source_name %} — {{ s.source_name }}{% endif %}</p>
+{% else %}<p>No external source link is published for this case.</p>{% endfor %}
+</div>
+<a class="button" href="/person/{{ person.case_number }}/information">Add information or correction</a>
+{% endblock %}

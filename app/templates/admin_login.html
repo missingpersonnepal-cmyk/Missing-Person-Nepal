@@ -1,0 +1,6 @@
+{% extends "base.html" %}
+{% block content %}
+<h1>Admin Login</h1>
+{% if error %}<div class="error">{{ error }}</div>{% endif %}
+<form method="post" class="card" style="max-width:430px"><label>Username</label><input name="username" required><label>Password</label><input name="password" type="password" required><button type="submit">Login</button></form>
+{% endblock %}

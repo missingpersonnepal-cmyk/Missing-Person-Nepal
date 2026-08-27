@@ -1,0 +1,14 @@
+services:
+  app:
+    build: .
+    ports:
+      - "8000:8000"
+    environment:
+      DATABASE_URL: ${DATABASE_URL:-sqlite:///./missing_person_dev.db}
+      SESSION_SECRET: ${SESSION_SECRET:-local-dev-only-change-me}
+      ADMIN_USERNAME: ${ADMIN_USERNAME:-admin}
+      ADMIN_PASSWORD: ${ADMIN_PASSWORD:-}
+      AUTO_CREATE_TABLES: ${AUTO_CREATE_TABLES:-true}
+    volumes:
+      - ./uploads:/app/uploads
+      - ./exports:/app/exports

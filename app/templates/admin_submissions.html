@@ -1,0 +1,17 @@
+{% extends "base.html" %}
+{% block content %}
+<h1>Pending Submissions</h1>
+{% for s in submissions %}
+<div class="card">
+  <h2>SUB-{{ '%06d'|format(s.id) }} — {{ s.kind }}</h2>
+  {% if s.photo_path %}<p><img src="/admin/media/{{ s.photo_path }}" alt="Submitted photo" style="max-width:220px;max-height:220px;object-fit:cover"></p>{% endif %}
+  <p><strong>{{ s.name or 'Additional information' }}</strong>{% if s.age %}, age {{ s.age }}{% endif %}<br>Last seen: {{ s.last_seen_location or 'Not supplied' }}{% if s.social_url %}<br><a href="{{ s.social_url }}" target="_blank">Original/social source</a>{% endif %}</p>
+  {% if s.kind == 'missing_report' %}<p><strong>Affected-area match:</strong> {% if location_match_map.get(s.id) %}<span class="badge">YES</span>{% else %}<span class="badge">NO / REVIEW</span>{% endif %}</p>{% endif %}
+  {% if s.notes %}<pre class="wrap">{{ s.notes }}</pre>{% endif %}
+  {% if duplicate_map.get(s.id) %}<div class="notice"><strong>Possible duplicates</strong>{% for p, score in duplicate_map[s.id] %}<div>{{ score }}% — {{ p.case_number }} — {{ p.name }} — {{ p.last_seen_location }}</div>{% endfor %}</div>{% endif %}
+  {% if s.kind == 'missing_report' %}<form method="post" action="/admin/submissions/{{ s.id }}/approve-new" style="display:inline"><button>Create new master case</button></form>{% endif %}
+  <form method="post" action="/admin/submissions/{{ s.id }}/attach" class="inline" style="margin-top:8px"><div><select name="person_id" required><option value="">Attach to existing person...</option>{% for p in people_by_disaster.get(s.disaster_id, []) %}<option value="{{ p.id }}">{{ p.case_number }} — {{ p.name }}</option>{% endfor %}</select></div><div><button class="secondary">Attach</button></div></form>
+  <form method="post" action="/admin/submissions/{{ s.id }}/reject" style="display:inline"><button class="danger">Reject</button></form>
+</div>
+{% else %}<div class="card">No pending submissions.</div>{% endfor %}
+{% endblock %}

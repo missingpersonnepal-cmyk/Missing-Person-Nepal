@@ -1,0 +1,32 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>{% block title %}Nepal Disaster Missing Persons Hub{% endblock %}</title>
+  <link rel="stylesheet" href="/static/style.css">
+</head>
+<body>
+<header>
+  <div class="container">
+    <a href="/"><strong>Missing Persons Hub</strong></a>
+    <a href="/report">Report Missing Person</a>
+    {% if request.session.get('admin') %}<a href="/admin">Admin</a>{% endif %}
+  </div>
+</header>
+<main class="container">
+  {% if request.session.get('admin') %}
+  <div class="admin-nav">
+    <a href="/admin">Dashboard</a>
+    <a href="/admin/events">Events</a>
+    <a href="/admin/people">People</a>
+    <a href="/admin/submissions">Submissions</a>
+    <a href="/admin/discovery">Discovery Bot</a>
+    <a href="/admin/export">Export</a>
+    <form method="post" action="/admin/logout" style="display:inline"><button class="secondary" type="submit">Logout</button></form>
+  </div>
+  {% endif %}
+  {% block content %}{% endblock %}
+</main>
+</body>
+</html>
