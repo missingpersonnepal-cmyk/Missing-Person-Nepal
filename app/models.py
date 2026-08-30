@@ -174,6 +174,43 @@ class PersonCaseState(Base):
     )
 
 
+class NotificationSubscription(Base):
+    __tablename__ = "mp_notification_subscriptions"
+    __table_args__ = (
+        UniqueConstraint("person_id", "channel", "destination", name="uq_mp_notification_subscription"),
+    )
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    person_id: Mapped[int] = mapped_column(ForeignKey("mp_missing_people.id"), index=True)
+    channel: Mapped[str] = mapped_column(String(20), index=True)
+    destination: Mapped[str] = mapped_column(Text)
+    active: Mapped[bool] = mapped_column(Boolean, default=True, index=True)
+    consented_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, onupdate=utcnow)
+
+
+class NotificationOutbox(Base):
+    __tablename__ = "mp_notification_outbox"
+    __table_args__ = (
+        UniqueConstraint("person_id", "subscription_id", "event_type", name="uq_mp_notification_event_delivery"),
+    )
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    person_id: Mapped[int] = mapped_column(ForeignKey("mp_missing_people.id"), index=True)
+    subscription_id: Mapped[int] = mapped_column(ForeignKey("mp_notification_subscriptions.id"), index=True)
+    event_type: Mapped[str] = mapped_column(String(40), index=True)
+    channel: Mapped[str] = mapped_column(String(20), index=True)
+    subject: Mapped[str | None] = mapped_column(Text, nullable=True)
+    body: Mapped[str] = mapped_column(Text)
+    status: Mapped[str] = mapped_column(String(20), default="pending", index=True)
+    attempts: Mapped[int] = mapped_column(Integer, default=0)
+    provider_message_id: Mapped[str | None] = mapped_column(Text, nullable=True)
+    last_error: Mapped[str | None] = mapped_column(Text, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
+    sent_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+
+
 class AdminUser(Base):
     __tablename__ = "mp_admins"
 

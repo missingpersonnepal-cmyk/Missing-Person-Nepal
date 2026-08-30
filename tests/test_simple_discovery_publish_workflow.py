@@ -131,7 +131,7 @@ def test_batch_multi_person_save_uses_default_images_unless_explicitly_enabled(
         assert {item.photo_path for item in db.query(MissingPerson).all()} == {None}
 
 
-def test_batch_save_keeps_source_image_when_operator_explicitly_enables_it(
+def test_batch_save_does_not_assign_shared_source_image_even_if_submitted(
     admin_client, monkeypatch
 ):
     create_event(admin_client)
@@ -158,7 +158,7 @@ def test_batch_save_keeps_source_image_when_operator_explicitly_enables_it(
 
     assert response.status_code == 303
     with SessionLocal() as db:
-        assert db.query(MissingPerson).one().photo_path == "shared.jpg"
+        assert db.query(MissingPerson).one().photo_path is None
 
 
 def test_pending_submission_can_be_approved_and_published_in_one_click(admin_client):

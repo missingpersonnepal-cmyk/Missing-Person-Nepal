@@ -2,6 +2,9 @@
 {% block content %}
 
 <div class="page-heading"><div><div class="eyebrow">Operations workspace</div><h1>Discovery</h1><p class="muted">Find, verify, and route public missing-person reports into the case workflow.</p></div></div>
+{% if queue_complete %}
+<div class="card" style="border:2px solid #2f855a"><strong>Review queue complete.</strong></div>
+{% endif %}
 {# Legacy section names retained for regression compatibility: Custom Search Tags / Phrases; Generated priority source searches. #}
 <p class="muted">Public-index discovery only. Review a finding before it becomes a missing-person case.</p>
 <span style="display:none">Generated priority source searches · Missing-Person Sharer / Group Finder · Custom Search Tags / Phrases · Full public post text / additional context</span>

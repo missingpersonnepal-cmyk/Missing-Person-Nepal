@@ -201,15 +201,27 @@
 
   {% if remaining_people %}
   <p><strong>Still to review from this source:</strong> {{ remaining_people|join(', ') }}</p>
+  {% for person_name in remaining_people %}
+  <form method="post" action="/admin/discovery/{{ candidate.id }}/remaining/remove" style="display:inline">
+    <input type="hidden" name="name" value="{{ person_name }}">
+    {% if source_post_text %}<textarea name="source_post_text" style="display:none">{{ source_post_text }}</textarea>{% endif %}
+    {% if ocr_text %}<textarea name="ocr_text" style="display:none">{{ ocr_text }}</textarea>{% endif %}
+    <button class="secondary">Remove {{ person_name }}</button>
+  </form>
+  {% endfor %}
+  <form method="post" action="/admin/discovery/{{ candidate.id }}/skip-remaining" style="display:inline">
+    <button class="secondary">Skip remaining & Next Post</button>
+  </form>
   {% else %}
   <p><strong>All detected names already have an entry from this source.</strong></p>
   {% endif %}
 </div>
 {% endif %}
 
-{% if source_image_url %}
 <div class="card">
   <h2>Picture found in public source</h2>
+  {% if source_image_url %}
+  <p><strong>Source image available</strong></p>
   <img
     src="{{ source_image_url }}"
     alt="Image attached to the public missing-person post"
@@ -225,16 +237,12 @@
       Use this picture for the person currently shown in the form
     </label>
     <input type="hidden" name="source_image_url" value="{{ source_image_url }}" form="person-entry-form">
-    {% if candidate.status == 'relevant' %}
-    <label class="image-choice">
-      <input type="checkbox" name="include_source_image" value="1" form="chatgpt-batch-form" {% if not multiple_people_signal %}checked{% endif %}>
-      Use this same picture for every person saved with the batch buttons
-    </label>
-    {% if multiple_people_signal %}<p class="muted"><strong>Off by default:</strong> this post may contain several people. Leave it off to give them the default picture, then add a verified individual photo later.</p>{% endif %}
-    {% endif %}
   </div>
+  {% else %}
+  <p><strong>Source image unavailable — upload manually if needed.</strong></p>
+  <p class="muted">Facebook or another provider may show a login page instead of an anonymous public image.</p>
+  {% endif %}
 </div>
-{% endif %}
 
 {% if ocr_text or ocr_detail %}
 <div class="card">
@@ -248,7 +256,7 @@
 </div>
 {% endif %}
 
-<form method="post" action="/admin/discovery/{{ candidate.id }}/submission" class="card" id="person-entry-form">
+<form method="post" action="/admin/discovery/{{ candidate.id }}/submission" class="card" id="person-entry-form" enctype="multipart/form-data">
   <h2>Create or attach missing-person record</h2>
   <p class="muted">
     {% if candidate.status == 'relevant' %}
@@ -362,6 +370,10 @@
 
   <label>Public information contact</label>
   <input id="person-phone" name="public_contact_number" value="{{ prefill.public_contact_number or '' }}">
+
+  <label>Upload image manually</label>
+  <input name="photo" type="file" accept="image/jpeg,image/png,image/webp">
+  <p class="muted">Leave blank for no photo / default placeholder. Uploaded images are validated and stripped of metadata.</p>
 
   {% if candidate.status not in ['irrelevant', 'rejected'] %}
   <div class="inline" style="gap:8px; flex-wrap:wrap">

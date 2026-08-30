@@ -27,6 +27,10 @@ class Settings:
     discovery_results_per_query: int = int(os.getenv("DISCOVERY_RESULTS_PER_QUERY", "10"))
     discovery_request_delay_seconds: float = float(os.getenv("DISCOVERY_REQUEST_DELAY_SECONDS", "1.0"))
     discovery_timeout_seconds: float = float(os.getenv("DISCOVERY_TIMEOUT_SECONDS", "15"))
+    sms_provider: str = os.getenv("SMS_PROVIDER", "disabled").strip().casefold()
+    email_provider: str = os.getenv("EMAIL_PROVIDER", "disabled").strip().casefold()
+    sms_from: str = os.getenv("SMS_FROM", "")
+    email_from: str = os.getenv("EMAIL_FROM", "")
 
 
 settings = Settings()

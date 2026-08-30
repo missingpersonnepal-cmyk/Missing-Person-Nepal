@@ -14,7 +14,8 @@ from ..config import settings
 from ..database import SessionLocal
 from ..models import (
     AdminUser, Disaster, DiscoveryCandidate, DiscoverySearchTag,
-    DiscoverySourceSeed, MissingPerson, PersonCaseState, Source, Submission,
+    DiscoverySourceSeed, MissingPerson, NotificationOutbox,
+    NotificationSubscription, PersonCaseState, Source, Submission,
 )
 from ..security import verify_password
 from ..services.discovery import discover_candidates, generate_queries, google_search_url
@@ -38,6 +39,14 @@ from ..services.exports import build_csv, build_xlsx
 from ..services.files import save_image
 from ..services.source_images import discover_public_post_image, discover_public_post_text, download_public_source_image, is_allowed_public_image_url
 from ..services.source_ocr import extract_ocr_text, ocr_available
+from ..services.notifications import (
+    add_subscription,
+    cancel_pending_notifications,
+    enqueue_case_notifications,
+    mask_destination,
+    retry_failed_notifications,
+)
+from ..services.notifications.messages import CASE_UPDATED, FOUND_ALIVE, IDENTIFIED_DECEASED
 from ..services.normalization import affected_location_match, canonicalize_url, detect_platform
 from ..services.priority_sources import (
     custom_tag_queries,
@@ -106,6 +115,56 @@ def _pending_name_matches(db, disaster_id: int, name: str) -> list[Submission]:
 
 
 PERSON_CASE_STATUSES = {"missing", "found", "identified"}
+
+
+def _next_discovery_review_url(db, candidate: DiscoveryCandidate, message: str | None = None) -> str:
+    next_candidate = db.scalar(
+        select(DiscoveryCandidate)
+        .where(
+            DiscoveryCandidate.id != candidate.id,
+            DiscoveryCandidate.disaster_id == candidate.disaster_id,
+            DiscoveryCandidate.platform == candidate.platform,
+            DiscoveryCandidate.status.in_(["new", "needs_ai", "relevant"]),
+        )
+        .order_by(DiscoveryCandidate.found_at.desc())
+    )
+    if next_candidate:
+        return f"/admin/discovery/{next_candidate.id}"
+    suffix = "&queue_complete=1" if message else ""
+    return f"/admin/discovery?disaster_id={candidate.disaster_id}&platform={candidate.platform}{suffix}"
+
+
+def _source_handled_names(db, candidate: DiscoveryCandidate) -> set[str]:
+    submission_names = db.scalars(
+        select(Submission.name).where(
+            Submission.disaster_id == candidate.disaster_id,
+            Submission.social_url == candidate.url,
+            or_(
+                Submission.status != "rejected",
+                Submission.kind == "discovery_skipped",
+            ),
+        )
+    ).all()
+    person_names = db.scalars(
+        select(MissingPerson.name)
+        .join(Source, Source.person_id == MissingPerson.id)
+        .where(
+            MissingPerson.disaster_id == candidate.disaster_id,
+            MissingPerson.archived.is_(False),
+            Source.url == candidate.url,
+        )
+    ).all()
+    return {
+        (name or "").strip().casefold()
+        for name in [*submission_names, *person_names]
+        if name
+    }
+
+
+def _remaining_source_names(db, candidate: DiscoveryCandidate, source_post_text: str = "", ocr_text: str = "") -> list[str]:
+    detected = extract_candidate_people_names(candidate, source_text=source_post_text, ocr_text=ocr_text)
+    handled = _source_handled_names(db, candidate)
+    return [name for name in detected if name.strip().casefold() not in handled]
 
 
 def _person_case_status_map(db, person_ids: list[int]) -> dict[int, str]:
@@ -407,6 +466,17 @@ def admin_person(request: Request, person_id: int):
             public_url=f"{settings.public_base_url}/person/{person.case_number}",
             merge_targets=merge_targets,
             case_status=_person_case_status_map(db, [person.id]).get(person.id, "missing"),
+            subscriptions=list(db.scalars(select(NotificationSubscription).where(NotificationSubscription.person_id == person.id)).all()),
+            notification_counts={
+                status: db.scalar(
+                    select(func.count(NotificationOutbox.id)).where(
+                        NotificationOutbox.person_id == person.id,
+                        NotificationOutbox.status == status,
+                    )
+                ) or 0
+                for status in ("pending", "sent", "failed")
+            },
+            mask_destination=mask_destination,
         )
 
 
@@ -431,6 +501,21 @@ async def admin_person_edit(request: Request, person_id: int):
         person.identification_details = str(form.get("identification_details") or "").strip() or None
         person.public_contact_number = str(form.get("public_contact_number") or "").strip() or None
         person.residential_address_private = str(form.get("residential_address_private") or "").strip() or None
+        photo_upload = form.get("photo")
+        if photo_upload is not None and getattr(photo_upload, "filename", ""):
+            try:
+                photo_path = await save_image(photo_upload, settings.upload_dir)
+            except ValueError as exc:
+                return HTMLResponse(str(exc), status_code=400)
+            if photo_path:
+                person.photo_path = photo_path
+        if str(form.get("meaningful_update") or "") == "1":
+            enqueue_case_notifications(
+                db,
+                person,
+                CASE_UPDATED,
+                update_note=str(form.get("status_note") or "").strip() or None,
+            )
         audit(db, request, "edit_person", "person", person.id)
         db.commit()
     return RedirectResponse(f"/admin/people/{person_id}", status_code=303)
@@ -477,6 +562,72 @@ def admin_person_remove_photo(request: Request, person_id: int):
     return RedirectResponse(f"/admin/people/{person_id}", status_code=303)
 
 
+@router.post("/admin/people/{person_id}/notifications")
+async def admin_person_add_notification(request: Request, person_id: int):
+    gate = admin_gate(request)
+    if gate:
+        return gate
+    form = await request.form()
+    with SessionLocal() as db:
+        if db.get(MissingPerson, person_id) is None:
+            return HTMLResponse("Not found", status_code=404)
+        try:
+            subscription = add_subscription(
+                db,
+                person_id,
+                str(form.get("channel") or ""),
+                str(form.get("destination") or ""),
+            )
+        except ValueError as exc:
+            return HTMLResponse(str(exc), status_code=400)
+        audit(
+            db,
+            request,
+            "add_notification_subscription",
+            "notification_subscription",
+            subscription.id,
+            subscription.channel,
+        )
+        db.commit()
+    return RedirectResponse(f"/admin/people/{person_id}", status_code=303)
+
+
+@router.post("/admin/people/{person_id}/notifications/{subscription_id}/disable")
+def admin_person_disable_notification(request: Request, person_id: int, subscription_id: int):
+    gate = admin_gate(request)
+    if gate:
+        return gate
+    with SessionLocal() as db:
+        subscription = db.get(NotificationSubscription, subscription_id)
+        if subscription and subscription.person_id == person_id:
+            subscription.active = False
+            audit(db, request, "disable_notification_subscription", "notification_subscription", subscription.id)
+            db.commit()
+    return RedirectResponse(f"/admin/people/{person_id}", status_code=303)
+
+
+@router.post("/admin/people/{person_id}/notifications/retry")
+def admin_person_retry_notifications(request: Request, person_id: int):
+    gate = admin_gate(request)
+    if gate:
+        return gate
+    with SessionLocal() as db:
+        retry_failed_notifications(db, person_id)
+        db.commit()
+    return RedirectResponse(f"/admin/people/{person_id}", status_code=303)
+
+
+@router.post("/admin/people/{person_id}/notifications/cancel")
+def admin_person_cancel_notifications(request: Request, person_id: int):
+    gate = admin_gate(request)
+    if gate:
+        return gate
+    with SessionLocal() as db:
+        cancel_pending_notifications(db, person_id)
+        db.commit()
+    return RedirectResponse(f"/admin/people/{person_id}", status_code=303)
+
+
 @router.post("/admin/people/{person_id}/status")
 async def admin_person_status(request: Request, person_id: int):
     gate = admin_gate(request)
@@ -492,7 +643,12 @@ async def admin_person_status(request: Request, person_id: int):
         person = db.get(MissingPerson, person_id)
         if person is None:
             return HTMLResponse("Not found", status_code=404)
+        previous_status = _person_case_status_map(db, [person.id]).get(person.id, "missing")
         _set_person_case_status(db, person, status, note)
+        if previous_status == "missing" and status == "found":
+            enqueue_case_notifications(db, person, FOUND_ALIVE)
+        elif previous_status == "missing" and status == "identified":
+            enqueue_case_notifications(db, person, IDENTIFIED_DECEASED)
         audit(
             db,
             request,
@@ -948,6 +1104,7 @@ def discovery_page(
     wide_raw: int | None = None,
     wide_added: int | None = None,
     wide_error: int | None = None,
+    queue_complete: int | None = None,
 ):
     gate = admin_gate(request)
     if gate:
@@ -1165,6 +1322,7 @@ def discovery_page(
             wide_provider_status=wide_provider_status,
             wide_query_plan=wide_query_plan,
             wide_error=bool(wide_error),
+            queue_complete=bool(queue_complete),
             pipeline_counts=pipeline_counts,
         )
 
@@ -1820,17 +1978,7 @@ async def discovery_candidate_review(
         }:
             detected_people.insert(0, prefill["name"])
 
-        source_submission_names = {
-            (item or "").strip().casefold()
-            for item in db.scalars(
-                select(Submission.name).where(
-                    Submission.disaster_id == candidate.disaster_id,
-                    Submission.social_url == candidate.url,
-                    Submission.status != "rejected",
-                )
-            ).all()
-            if item
-        }
+        source_submission_names = _source_handled_names(db, candidate)
         remaining_people = [
             item for item in detected_people
             if item.casefold() not in source_submission_names
@@ -1985,6 +2133,65 @@ async def discovery_chatgpt_prefill_parse(request: Request, candidate_id: int):
     return JSONResponse(payload)
 
 
+@router.post("/admin/discovery/{candidate_id}/skip-remaining")
+async def discovery_skip_remaining(request: Request, candidate_id: int):
+    gate = admin_gate(request)
+    if gate:
+        return gate
+    with SessionLocal() as db:
+        candidate = db.get(DiscoveryCandidate, candidate_id)
+        if candidate is None:
+            return HTMLResponse("Not found", status_code=404)
+        candidate.status = "reviewed"
+        audit(db, request, "skip_remaining_discovery_people", "discovery_candidate", candidate.id, candidate.url)
+        db.commit()
+        return RedirectResponse(_next_discovery_review_url(db, candidate, "Review queue complete."), status_code=303)
+
+
+@router.post("/admin/discovery/{candidate_id}/remaining/remove")
+async def discovery_remove_remaining_person(request: Request, candidate_id: int):
+    gate = admin_gate(request)
+    if gate:
+        return gate
+    form = await request.form()
+    name = str(form.get("name") or "").strip()
+    source_post_text = str(form.get("source_post_text") or "").strip()
+    ocr_text = str(form.get("ocr_text") or "").strip()
+    if not name:
+        return RedirectResponse(f"/admin/discovery/{candidate_id}", status_code=303)
+    with SessionLocal() as db:
+        candidate = db.get(DiscoveryCandidate, candidate_id)
+        if candidate is None:
+            return HTMLResponse("Not found", status_code=404)
+        existing = db.scalar(
+            select(Submission.id).where(
+                Submission.disaster_id == candidate.disaster_id,
+                Submission.social_url == candidate.url,
+                Submission.kind == "discovery_skipped",
+                func.lower(Submission.name) == name.casefold(),
+            )
+        )
+        if existing is None:
+            db.add(
+                Submission(
+                    disaster_id=candidate.disaster_id,
+                    kind="discovery_skipped",
+                    status="rejected",
+                    name=name,
+                    social_url=candidate.url,
+                    notes="Operator removed this extracted person from review.",
+                )
+            )
+            db.flush()
+        remaining_names = _remaining_source_names(db, candidate, source_post_text, ocr_text)
+        candidate.status = "relevant" if remaining_names else "reviewed"
+        audit(db, request, "remove_extracted_discovery_person", "discovery_candidate", candidate.id, name)
+        db.commit()
+        if remaining_names:
+            return RedirectResponse(f"/admin/discovery/{candidate_id}#chatgpt-prefill", status_code=303)
+        return RedirectResponse(_next_discovery_review_url(db, candidate, "Review queue complete."), status_code=303)
+
+
 @router.post("/admin/discovery/{candidate_id}/chatgpt-prefill/batch")
 async def discovery_chatgpt_prefill_batch(request: Request, candidate_id: int):
     gate = admin_gate(request)
@@ -1995,7 +2202,6 @@ async def discovery_chatgpt_prefill_batch(request: Request, candidate_id: int):
     source_post_text = str(form.get("source_post_text") or "").strip()
     ocr_text = str(form.get("ocr_text") or "").strip()
     save_mode = str(form.get("save_mode") or "pending").strip().casefold()
-    include_source_image = str(form.get("include_source_image") or "") == "1"
     if save_mode not in {"pending", "publish"}:
         save_mode = "pending"
 
@@ -2020,17 +2226,6 @@ async def discovery_chatgpt_prefill_batch(request: Request, candidate_id: int):
             return HTMLResponse("Unknown disaster", status_code=404)
 
         notes = _source_notes_for_candidate(candidate, source_post_text, ocr_text)
-        source_image_url = None
-        photo_path = None
-        if candidate.platform == "facebook":
-            source_image_url = await discover_public_post_image(candidate.url)
-        if (
-            include_source_image
-            and source_image_url
-            and is_allowed_public_image_url(source_image_url)
-        ):
-            photo_path = await download_public_source_image(source_image_url, settings.upload_dir)
-
         for person_data in payload["people"]:
             name = str(person_data.get("name") or "").strip()
             if not name:
@@ -2075,7 +2270,7 @@ async def discovery_chatgpt_prefill_batch(request: Request, candidate_id: int):
                     name_ne=str(person_data.get("name_ne") or "").strip() or None,
                     age=parse_int(person_data.get("age")),
                     gender=_normalize_gender(person_data.get("gender")),
-                    photo_path=photo_path,
+                    photo_path=None,
                     last_seen_date=parse_date(person_data.get("last_seen_date")),
                     last_seen_time=parse_time(person_data.get("last_seen_time")),
                     last_seen_location=str(person_data.get("last_seen_location") or "").strip() or "Unknown",
@@ -2106,7 +2301,7 @@ async def discovery_chatgpt_prefill_batch(request: Request, candidate_id: int):
                         name_ne=str(person_data.get("name_ne") or "").strip() or None,
                         age=parse_int(person_data.get("age")),
                         gender=_normalize_gender(person_data.get("gender")),
-                        photo_path=photo_path,
+                        photo_path=None,
                         last_seen_date=parse_date(person_data.get("last_seen_date")),
                         last_seen_time=parse_time(person_data.get("last_seen_time")),
                         last_seen_location=str(person_data.get("last_seen_location") or "").strip() or None,
@@ -2119,10 +2314,8 @@ async def discovery_chatgpt_prefill_batch(request: Request, candidate_id: int):
                 )
                 created += 1
 
-        # Saving records does not silently declare the whole source exhausted.
-        # The operator can still add another person or explicitly mark the post
-        # processed after reviewing the final list.
-        candidate.status = "relevant"
+        remaining_names = _remaining_source_names(db, candidate, source_post_text, ocr_text)
+        candidate.status = "relevant" if remaining_names else "reviewed"
         audit(
             db,
             request,
@@ -2144,10 +2337,12 @@ async def discovery_chatgpt_prefill_batch(request: Request, candidate_id: int):
             "batch_skipped": skipped,
         }
     )
-    return RedirectResponse(
-        f"/admin/discovery/{candidate_id}?{params}#chatgpt-prefill",
-        status_code=303,
-    )
+    if published and not remaining_names:
+        with SessionLocal() as db:
+            candidate = db.get(DiscoveryCandidate, candidate_id)
+            if candidate is not None:
+                return RedirectResponse(_next_discovery_review_url(db, candidate, "Review queue complete."), status_code=303)
+    return RedirectResponse(f"/admin/discovery/{candidate_id}?{params}#chatgpt-prefill", status_code=303)
 
 
 @router.post("/admin/discovery/{candidate_id}/submission")
@@ -2252,7 +2447,13 @@ async def discovery_to_submission(request: Request, candidate_id: int):
         include_source_image = str(form.get("include_source_image") or "") == "1"
         photo_path = None
 
-        if include_source_image and source_image_url and is_allowed_public_image_url(source_image_url):
+        photo_upload = form.get("photo")
+        if photo_upload is not None and getattr(photo_upload, "filename", ""):
+            try:
+                photo_path = await save_image(photo_upload, settings.upload_dir)
+            except ValueError as exc:
+                return HTMLResponse(str(exc), status_code=400)
+        elif include_source_image and source_image_url and is_allowed_public_image_url(source_image_url):
             photo_path = await download_public_source_image(
                 source_image_url,
                 settings.upload_dir,
@@ -2306,7 +2507,8 @@ async def discovery_to_submission(request: Request, candidate_id: int):
                     source_text=notes,
                 )
             )
-            candidate.status = "relevant"
+            remaining_names = _remaining_source_names(db, candidate, source_post_text, ocr_text)
+            candidate.status = "relevant" if remaining_names else "reviewed"
             audit(
                 db,
                 request,
@@ -2316,10 +2518,12 @@ async def discovery_to_submission(request: Request, candidate_id: int):
                 candidate.url,
             )
             db.commit()
-            return RedirectResponse(
-                f"/admin/discovery/{candidate_id}?created=1#person-entry-form",
-                status_code=303,
-            )
+            if remaining_names:
+                return RedirectResponse(
+                    f"/admin/discovery/{candidate_id}?created=1#person-entry-form",
+                    status_code=303,
+                )
+            return RedirectResponse(_next_discovery_review_url(db, candidate, "Review queue complete."), status_code=303)
 
         sub = Submission(
             disaster_id=candidate.disaster_id,
@@ -2340,8 +2544,6 @@ async def discovery_to_submission(request: Request, candidate_id: int):
         )
         db.add(sub)
 
-        # Keep the source in Relevant until an operator explicitly marks the
-        # whole post processed. One post may contain several missing people.
         candidate.status = "relevant"
         db.flush()
         audit(
