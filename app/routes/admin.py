@@ -1746,6 +1746,36 @@ async def discovery_candidate_review(
             if item.casefold() not in source_submission_names
         ]
 
+        related_posts_by_person: dict[str, list[DiscoveryCandidate]] = {
+            item: [] for item in detected_people
+        }
+        if detected_people:
+            name_filters = []
+            for person_name in detected_people:
+                pattern = f"%{person_name}%"
+                name_filters.extend(
+                    [
+                        DiscoveryCandidate.title.ilike(pattern),
+                        DiscoveryCandidate.snippet.ilike(pattern),
+                    ]
+                )
+            related_candidates = db.scalars(
+                select(DiscoveryCandidate)
+                .where(
+                    DiscoveryCandidate.disaster_id == candidate.disaster_id,
+                    DiscoveryCandidate.id != candidate.id,
+                    or_(*name_filters),
+                )
+                .order_by(DiscoveryCandidate.found_at.desc())
+                .limit(30)
+            ).all()
+            for person_name in detected_people:
+                folded_name = person_name.casefold()
+                related_posts_by_person[person_name] = [
+                    item for item in related_candidates
+                    if folded_name in f"{item.title or ''} {item.snippet or ''}".casefold()
+                ][:8]
+
         if (
             created
             and remaining_people
@@ -1785,6 +1815,7 @@ async def discovery_candidate_review(
             exact_duplicates=exact_duplicates,
             pending_duplicates=pending_duplicates,
             source_submission_names=source_submission_names,
+            related_posts_by_person=related_posts_by_person,
             chatgpt_prefill_prompt=chatgpt_prefill_prompt,
             openai_prefill_status=openai_prefill_status(),
             created=bool(created),

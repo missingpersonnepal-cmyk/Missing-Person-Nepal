@@ -182,6 +182,38 @@
       {% if person_name.casefold() in source_submission_names %}
         <span class="badge">entry already created from this post</span>
       {% endif %}
+      {% set related_posts = related_posts_by_person.get(person_name, []) %}
+      {% if related_posts %}
+        <button type="button" class="button secondary related-posts-trigger" data-dialog="related-posts-{{ loop.index }}">
+          Review {{ related_posts|length }} matching post{% if related_posts|length != 1 %}s{% endif %}
+        </button>
+        <dialog class="related-posts-dialog" id="related-posts-{{ loop.index }}">
+          <div class="related-posts-dialog__header">
+            <div>
+              <div class="eyebrow">Possible duplicate evidence</div>
+              <h2>Other posts mentioning {{ person_name }}</h2>
+            </div>
+            <button type="button" class="secondary related-posts-close" aria-label="Close matching posts">Close</button>
+          </div>
+          <p class="muted">Compare the details below before deciding whether these posts describe the same person. A name match alone is not confirmation.</p>
+          <div class="related-posts-list">
+            {% for related in related_posts %}
+            <article class="related-post-card">
+              <div class="related-post-card__meta">
+                <span class="badge">{{ related.platform }}</span>
+                <span class="badge">{{ related.status }}</span>
+              </div>
+              <h3>{{ related.title or 'Untitled public post' }}</h3>
+              <p>{{ related.snippet or 'No indexed post text is available. Open the original source to compare it.' }}</p>
+              <div class="inline">
+                <a class="button" href="/admin/discovery/{{ related.id }}" target="_blank" rel="noopener">Open review</a>
+                <a class="button secondary" href="{{ related.url }}" target="_blank" rel="noopener noreferrer">Open original post</a>
+              </div>
+            </article>
+            {% endfor %}
+          </div>
+        </dialog>
+      {% endif %}
     </li>
     {% endfor %}
   </ul>
@@ -380,6 +412,20 @@
 
 <script>
 (function () {
+  document.querySelectorAll('.related-posts-trigger').forEach((button) => {
+    button.addEventListener('click', () => {
+      const dialog = document.getElementById(button.dataset.dialog);
+      if (dialog && typeof dialog.showModal === 'function') dialog.showModal();
+    });
+  });
+  document.querySelectorAll('.related-posts-dialog').forEach((dialog) => {
+    const closeButton = dialog.querySelector('.related-posts-close');
+    if (closeButton) closeButton.addEventListener('click', () => dialog.close());
+    dialog.addEventListener('click', (event) => {
+      if (event.target === dialog) dialog.close();
+    });
+  });
+
   const candidateId = {{ candidate.id }};
   const cacheKey = `missing-person-ai-prefill-${candidateId}`;
   const alreadyEnteredNames = new Set({{ source_submission_names|list|tojson }});

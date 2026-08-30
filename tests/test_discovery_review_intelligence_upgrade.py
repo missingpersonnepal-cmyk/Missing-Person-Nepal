@@ -195,6 +195,35 @@ def test_multi_person_source_can_create_two_entries_and_stays_relevant(
         assert names == {"Dorje Tamang", "Pasang Tamang"}
 
 
+def test_multi_person_warning_links_matching_posts_in_review_dialog(
+    admin_client,
+    monkeypatch,
+):
+    _disable_public_fetch(monkeypatch)
+    _create_event(admin_client)
+    _add_manual_candidate(
+        admin_client,
+        "https://facebook.com/example/posts/current",
+        "Person Missing Yuvraj Bhandari and Dinesh Bhandari",
+        "Both were last seen near Timure.",
+    )
+    _add_manual_candidate(
+        admin_client,
+        "https://facebook.com/example/posts/earlier",
+        "Missing Yuvraj Bhandari",
+        "Yuvraj Bhandari was last seen in Timure wearing a blue jacket.",
+    )
+
+    page = admin_client.get("/admin/discovery/1")
+
+    assert page.status_code == 200
+    assert "Review 1 matching post" in page.text
+    assert "Other posts mentioning Yuvraj Bhandari" in page.text
+    assert "Yuvraj Bhandari was last seen in Timure" in page.text
+    assert 'href="/admin/discovery/2"' in page.text
+    assert 'href="https://facebook.com/example/posts/earlier"' in page.text
+
+
 def test_exact_duplicate_requires_attach_or_explicit_continue(
     admin_client,
     monkeypatch,
