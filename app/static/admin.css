@@ -14,5 +14,8 @@
 .event-row small { display:block; margin-top:3px; color:var(--muted); }
 .checklist { padding-left:1.2rem; }
 .checklist li { margin:9px 0; line-height:1.4; }
+.image-use-panel { max-width:720px; margin-top:16px; padding:16px; border:1px solid #d8b46a; border-radius:9px; background:#fff8e8; }
+.image-choice { display:flex; align-items:flex-start; gap:9px; margin:12px 0; padding:10px; border-radius:7px; background:white; cursor:pointer; }
+.image-choice input { flex:0 0 auto; margin-top:3px; }
 @media (max-width:1000px) { .workflow-board { grid-template-columns:repeat(2,1fr); } .metric-grid { grid-template-columns:repeat(2,1fr); } }
 @media (max-width:560px) { .workflow-board, .metric-grid, .dashboard-lower { grid-template-columns:1fr; } }

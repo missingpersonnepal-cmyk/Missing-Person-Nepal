@@ -16,7 +16,18 @@
     </div>
   </form>
 </div>
-{% if person.photo_path %}<div class="card"><img src="/admin/media/{{ person.photo_path }}" alt="Person photo" style="max-width:300px;max-height:300px;object-fit:cover"></div>{% endif %}
+<div class="card">
+  <h2>Case picture</h2>
+  <img src="{% if person.photo_path %}/admin/media/{{ person.photo_path }}{% else %}/static/default-person.svg{% endif %}" alt="{% if person.photo_path %}Person photo{% else %}Default person placeholder{% endif %}" style="width:300px;max-width:100%;height:300px;object-fit:cover;border-radius:8px;background:#e8ebe6">
+  {% if person.photo_path %}
+  <p class="muted">Remove this picture if it does not clearly belong to this person. The public case will use the default placeholder.</p>
+  <form method="post" action="/admin/people/{{ person.id }}/photo/remove">
+    <button class="danger" type="submit">Remove picture</button>
+  </form>
+  {% else %}
+  <p class="muted">No verified individual picture is attached. Public pages use the default placeholder.</p>
+  {% endif %}
+</div>
 <form method="post" action="/admin/people/{{ person.id }}/edit" class="card">
 <div class="inline"><div><label>Name</label><input name="name" value="{{ person.name }}"></div><div><label>Nepali name</label><input name="name_ne" value="{{ person.name_ne or '' }}"></div><div><label>Age</label><input type="number" name="age" value="{{ person.age or '' }}"></div></div>
 <div class="inline"><div><label>Gender</label><select name="gender"><option value="" {% if not person.gender %}selected{% endif %}>Unknown</option><option value="Male" {% if person.gender == 'Male' %}selected{% endif %}>Male</option><option value="Female" {% if person.gender == 'Female' %}selected{% endif %}>Female</option></select></div><div><label>Last-seen date</label><input type="date" name="last_seen_date" value="{{ person.last_seen_date or '' }}"></div><div><label>Last-seen time</label><input type="time" name="last_seen_time" value="{{ person.last_seen_time or '' }}"></div></div>

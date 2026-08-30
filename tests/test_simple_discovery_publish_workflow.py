@@ -101,6 +101,66 @@ def test_removed_person_is_not_submitted_when_payload_contains_only_kept_people(
     assert names == ["Rajesh Shrestha"]
 
 
+def test_batch_multi_person_save_uses_default_images_unless_explicitly_enabled(
+    admin_client, monkeypatch
+):
+    create_event(admin_client)
+    add_relevant_candidate()
+
+    async def source_image(_url):
+        return "https://scontent.xx.fbcdn.net/shared.jpg"
+
+    async def download_image(_url, _destination):
+        return "shared.jpg"
+
+    monkeypatch.setattr("app.routes.admin.discover_public_post_image", source_image)
+    monkeypatch.setattr("app.routes.admin.download_public_source_image", download_image)
+    payload = {
+        "people": [person("Rajesh Shrestha"), person("Kiran Shrestha")],
+        "source_notes": None,
+    }
+
+    response = admin_client.post(
+        "/admin/discovery/1/chatgpt-prefill/batch",
+        data={"result_json": json.dumps(payload), "save_mode": "publish"},
+        follow_redirects=False,
+    )
+
+    assert response.status_code == 303
+    with SessionLocal() as db:
+        assert {item.photo_path for item in db.query(MissingPerson).all()} == {None}
+
+
+def test_batch_save_keeps_source_image_when_operator_explicitly_enables_it(
+    admin_client, monkeypatch
+):
+    create_event(admin_client)
+    add_relevant_candidate()
+
+    async def source_image(_url):
+        return "https://scontent.xx.fbcdn.net/shared.jpg"
+
+    async def download_image(_url, _destination):
+        return "shared.jpg"
+
+    monkeypatch.setattr("app.routes.admin.discover_public_post_image", source_image)
+    monkeypatch.setattr("app.routes.admin.download_public_source_image", download_image)
+
+    response = admin_client.post(
+        "/admin/discovery/1/chatgpt-prefill/batch",
+        data={
+            "result_json": json.dumps({"people": [person("Rajesh Shrestha")]}),
+            "save_mode": "publish",
+            "include_source_image": "1",
+        },
+        follow_redirects=False,
+    )
+
+    assert response.status_code == 303
+    with SessionLocal() as db:
+        assert db.query(MissingPerson).one().photo_path == "shared.jpg"
+
+
 def test_pending_submission_can_be_approved_and_published_in_one_click(admin_client):
     create_event(admin_client)
     with SessionLocal() as db:

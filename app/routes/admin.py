@@ -436,6 +436,47 @@ async def admin_person_edit(request: Request, person_id: int):
     return RedirectResponse(f"/admin/people/{person_id}", status_code=303)
 
 
+@router.post("/admin/people/{person_id}/photo/remove")
+def admin_person_remove_photo(request: Request, person_id: int):
+    gate = admin_gate(request)
+    if gate:
+        return gate
+    filename = None
+    with SessionLocal() as db:
+        person = db.get(MissingPerson, person_id)
+        if person is None:
+            return HTMLResponse("Not found", status_code=404)
+        filename = person.photo_path
+        if filename:
+            person.photo_path = None
+            audit(
+                db,
+                request,
+                "remove_person_photo",
+                "person",
+                person.id,
+                "replaced with default placeholder",
+            )
+            db.commit()
+
+            still_referenced = db.scalar(
+                select(func.count()).select_from(Submission).where(
+                    Submission.photo_path == filename
+                )
+            ) or db.scalar(
+                select(func.count()).select_from(MissingPerson).where(
+                    MissingPerson.photo_path == filename
+                )
+            )
+            if not still_referenced and Path(filename).name == filename:
+                try:
+                    (settings.upload_dir / filename).unlink(missing_ok=True)
+                except OSError:
+                    # The database change is authoritative; orphan cleanup can retry later.
+                    pass
+    return RedirectResponse(f"/admin/people/{person_id}", status_code=303)
+
+
 @router.post("/admin/people/{person_id}/status")
 async def admin_person_status(request: Request, person_id: int):
     gate = admin_gate(request)
@@ -1954,6 +1995,7 @@ async def discovery_chatgpt_prefill_batch(request: Request, candidate_id: int):
     source_post_text = str(form.get("source_post_text") or "").strip()
     ocr_text = str(form.get("ocr_text") or "").strip()
     save_mode = str(form.get("save_mode") or "pending").strip().casefold()
+    include_source_image = str(form.get("include_source_image") or "") == "1"
     if save_mode not in {"pending", "publish"}:
         save_mode = "pending"
 
@@ -1982,7 +2024,11 @@ async def discovery_chatgpt_prefill_batch(request: Request, candidate_id: int):
         photo_path = None
         if candidate.platform == "facebook":
             source_image_url = await discover_public_post_image(candidate.url)
-        if source_image_url and is_allowed_public_image_url(source_image_url):
+        if (
+            include_source_image
+            and source_image_url
+            and is_allowed_public_image_url(source_image_url)
+        ):
             photo_path = await download_public_source_image(source_image_url, settings.upload_dir)
 
         for person_data in payload["people"]:

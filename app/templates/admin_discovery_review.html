@@ -218,6 +218,21 @@
   <p class="muted">
     Source evidence only. OCR may read written text from this image, but the system does not identify a person from their face or infer identity from appearance.
   </p>
+  <div class="image-use-panel">
+    <strong>Choose whether this picture belongs to the person being saved</strong>
+    <label class="image-choice">
+      <input type="checkbox" name="include_source_image" value="1" form="person-entry-form" checked>
+      Use this picture for the person currently shown in the form
+    </label>
+    <input type="hidden" name="source_image_url" value="{{ source_image_url }}" form="person-entry-form">
+    {% if candidate.status == 'relevant' %}
+    <label class="image-choice">
+      <input type="checkbox" name="include_source_image" value="1" form="chatgpt-batch-form" {% if not multiple_people_signal %}checked{% endif %}>
+      Use this same picture for every person saved with the batch buttons
+    </label>
+    {% if multiple_people_signal %}<p class="muted"><strong>Off by default:</strong> this post may contain several people. Leave it off to give them the default picture, then add a verified individual photo later.</p>{% endif %}
+    {% endif %}
+  </div>
 </div>
 {% endif %}
 
@@ -347,16 +362,6 @@
 
   <label>Public information contact</label>
   <input id="person-phone" name="public_contact_number" value="{{ prefill.public_contact_number or '' }}">
-
-  {% if source_image_url %}
-  <input type="hidden" name="source_image_url" value="{{ source_image_url }}">
-  <p>
-    <label>
-      <input type="checkbox" name="include_source_image" value="1" checked>
-      Include this reviewed source image in the pending missing-person record
-    </label>
-  </p>
-  {% endif %}
 
   {% if candidate.status not in ['irrelevant', 'rejected'] %}
   <div class="inline" style="gap:8px; flex-wrap:wrap">
