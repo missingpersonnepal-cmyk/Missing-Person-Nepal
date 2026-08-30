@@ -124,9 +124,11 @@ def test_discovery_templates_expose_simple_add_remove_publish_controls():
     review = Path("app/templates/admin_discovery_review.html").read_text(encoding="utf-8")
     people = Path("app/templates/admin_people.html").read_text(encoding="utf-8")
     submissions = Path("app/templates/admin_submissions.html").read_text(encoding="utf-8")
+    index = Path("app/templates/index.html").read_text(encoding="utf-8")
+    person = Path("app/templates/person.html").read_text(encoding="utf-8")
 
     assert "Add Search Tag" in discovery
-    assert "Add Page / Group / Influencer" in discovery
+    assert "Track Source Accounts" in discovery
     assert "Done Posts" in discovery
     assert "Public visibility is controlled separately" in discovery
     assert "data-ai-remove" in review
@@ -135,3 +137,7 @@ def test_discovery_templates_expose_simple_add_remove_publish_controls():
     assert "Save & Publish" in review
     assert "Publish" in people
     assert "Approve & Publish" in submissions
+    assert "admin_username" in index
+    assert "default-person.svg" in index
+    assert "admin_username" in person
+    assert "default-person.svg" in person

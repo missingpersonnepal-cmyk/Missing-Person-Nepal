@@ -1,0 +1,6 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 480 480" role="img" aria-label="Default missing person placeholder">
+  <rect width="480" height="480" rx="28" fill="#f3f4f6"/>
+  <circle cx="240" cy="168" r="72" fill="#cbd5e1"/>
+  <path d="M120 392c0-74 54-126 120-126s120 52 120 126" fill="#cbd5e1"/>
+  <rect x="52" y="52" width="376" height="376" rx="24" fill="none" stroke="#d1d5db" stroke-width="10"/>
+</svg>

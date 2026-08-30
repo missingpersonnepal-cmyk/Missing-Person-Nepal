@@ -14,11 +14,19 @@
 <div class="grid">
 {% for p in people %}
   <div class="card person-card">
-    {% if p.photo_path %}<img src="/media/person/{{ p.case_number }}" alt="Submitted photo for {{ p.name }}">{% endif %}
+    <img src="{% if p.photo_path %}/media/person/{{ p.case_number }}{% else %}/static/default-person.svg{% endif %}" alt="{% if p.photo_path %}Submitted photo for {{ p.name }}{% else %}Default placeholder image{% endif %}">
     <h2>{{ p.name }}</h2>
     {% if p.name_ne %}<div>{{ p.name_ne }}</div>{% endif %}
     <p><strong>Case:</strong> {{ p.case_number }}<br><strong>Age:</strong> {{ p.age or 'Unknown' }}<br><strong>Last seen:</strong> {{ p.last_seen_location }}{% if p.last_seen_date %}<br><strong>Date:</strong> {{ p.last_seen_date }}{% endif %}</p>
     <a class="button" href="/person/{{ p.case_number }}">View details</a>
+    {% if admin_username %}
+    <div class="inline" style="gap:8px; flex-wrap:wrap; margin-top:10px">
+      <a class="button secondary" href="/admin/people/{{ p.id }}">Edit</a>
+      <form method="post" action="/admin/people/{{ p.id }}/archive" style="display:inline">
+        <button class="danger" type="submit">Delete</button>
+      </form>
+    </div>
+    {% endif %}
   </div>
 {% else %}
   <div class="card">No published records match this search.</div>

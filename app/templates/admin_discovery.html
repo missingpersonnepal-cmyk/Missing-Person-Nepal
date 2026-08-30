@@ -1,12 +1,12 @@
 {% extends "base.html" %}
 {% block content %}
 
-<h1>Discovery</h1>
+<div class="page-heading"><div><div class="eyebrow">Operations workspace</div><h1>Discovery</h1><p class="muted">Find, verify, and route public missing-person reports into the case workflow.</p></div></div>
 {# Legacy section names retained for regression compatibility: Custom Search Tags / Phrases; Generated priority source searches. #}
 <p class="muted">Public-index discovery only. Review a finding before it becomes a missing-person case.</p>
 <span style="display:none">Generated priority source searches · Missing-Person Sharer / Group Finder · Custom Search Tags / Phrases · Full public post text / additional context</span>
 
-<form method="get" class="card inline" style="align-items:end; gap:10px">
+<form method="get" class="card inline discovery-toolbar" style="align-items:end; gap:10px">
   <div>
     <label>Event</label>
     <select name="disaster_id">
@@ -37,21 +37,23 @@
 {% endif %}
 
 <div class="card">
-  <div class="inline" style="gap:14px; flex-wrap:wrap; align-items:center">
-    <strong>Queue:</strong>
-    <a href="{{ queue_links.review }}">To Review ({{ queue_counts.review }})</a>
-    <a href="{{ queue_links.relevant }}">Relevant ({{ queue_counts.relevant }})</a>
-    <a href="{{ queue_links.irrelevant }}">Irrelevant ({{ queue_counts.irrelevant }})</a>
-    <a href="{{ queue_links.processed }}">Done Posts ({{ queue_counts.processed }})</a>
+  <div class="eyebrow" style="margin-bottom:10px">Review queue</div>
+  <div class="queue-nav">
+    <a href="{{ queue_links.review }}"><span>To Review</span><span class="queue-count">{{ queue_counts.review }}</span></a>
+    <a href="{{ queue_links.relevant }}"><span>Relevant</span><span class="queue-count">{{ queue_counts.relevant }}</span></a>
+    <a href="{{ queue_links.irrelevant }}"><span>Irrelevant</span><span class="queue-count">{{ queue_counts.irrelevant }}</span></a>
+    <a href="{{ queue_links.processed }}"><span>Done Posts</span><span class="queue-count">{{ queue_counts.processed }}</span></a>
   </div>
   <p class="muted" style="margin-bottom:0">“Done Posts” means the source review is complete. Public visibility is controlled separately by the case's Published status.</p>
 </div>
 
 <div class="card">
-  <div class="inline" style="gap:18px; flex-wrap:wrap">
-    <div><strong>Pending review records:</strong> {{ pipeline_counts.pending }}</div>
-    <div><strong>Unpublished cases:</strong> {{ pipeline_counts.unpublished }}</div>
-    <div><strong>Live missing cases:</strong> {{ pipeline_counts.published }}</div>
+  <div class="workflow-stats">
+    <div class="workflow-stat"><span class="muted">Pending review</span><strong>{{ pipeline_counts.pending }}</strong></div>
+    <div class="workflow-stat"><span class="muted">Unpublished cases</span><strong>{{ pipeline_counts.unpublished }}</strong></div>
+    <div class="workflow-stat"><span class="muted">Live missing cases</span><strong>{{ pipeline_counts.published }}</strong></div>
+  </div>
+  <div class="inline" style="margin-top:14px">
     <a href="/admin/submissions">Open Pending</a>
     <a href="/admin/people?case_status=missing&disaster_id={{ selected.id }}">Open Missing Persons</a>
     <a href="/">Open Public Hub</a>
@@ -228,22 +230,8 @@
   <input type="hidden" name="q" value="{{ q }}">
   <div class="inline" style="gap:8px; flex-wrap:wrap; align-items:center; margin-bottom:12px">
     <button type="button" class="secondary" id="select-all-candidates">Select all</button>
-    <form method="post" action="/admin/discovery/bulk-status" id="bulk-mark-relevant-form" style="display:inline">
-      <input type="hidden" name="disaster_id" value="{{ selected.id }}">
-      <input type="hidden" name="platform" value="{{ platform }}">
-      <input type="hidden" name="view" value="{{ view }}">
-      <input type="hidden" name="q" value="{{ q }}">
-      <input type="hidden" name="status_action" value="relevant">
-      <button type="submit">Mark selected Relevant</button>
-    </form>
-    <form method="post" action="/admin/discovery/bulk-status" id="bulk-mark-irrelevant-form" style="display:inline">
-      <input type="hidden" name="disaster_id" value="{{ selected.id }}">
-      <input type="hidden" name="platform" value="{{ platform }}">
-      <input type="hidden" name="view" value="{{ view }}">
-      <input type="hidden" name="q" value="{{ q }}">
-      <input type="hidden" name="status_action" value="irrelevant">
-      <button type="submit" class="secondary">Mark selected Irrelevant</button>
-    </form>
+    <button type="button" id="bulk-mark-relevant-btn">Mark selected Relevant</button>
+    <button type="button" id="bulk-mark-irrelevant-btn" class="secondary">Mark selected Irrelevant</button>
     <span class="muted" id="selected-candidate-count">0 selected</span>
   </div>
 
@@ -312,8 +300,8 @@
   document.querySelectorAll('.discovery-review-link').forEach((link) => link.addEventListener('click', remember));
 
   const bulkForm = document.getElementById('bulk-discovery-form');
-  const bulkRelevantForm = document.getElementById('bulk-mark-relevant-form');
-  const bulkIrrelevantForm = document.getElementById('bulk-mark-irrelevant-form');
+  const bulkRelevantButton = document.getElementById('bulk-mark-relevant-btn');
+  const bulkIrrelevantButton = document.getElementById('bulk-mark-irrelevant-btn');
   const checkboxes = Array.from(document.querySelectorAll('.candidate-checkbox'));
   const selectAll = document.getElementById('select-all-candidates');
   const selectedCount = document.getElementById('selected-candidate-count');
@@ -325,7 +313,7 @@
 
   function syncBulkForm(form) {
     if (!form) return;
-    form.querySelectorAll('input[data-bulk-copy]').forEach((item) => item.remove());
+    form.querySelectorAll('input[data-bulk-copy="1"]').forEach((item) => item.remove());
     checkboxes.filter((box) => box.checked).forEach((box) => {
       const input = document.createElement('input');
       input.type = 'hidden';
@@ -336,26 +324,46 @@
     });
   }
 
+  function submitBulk(action) {
+    const selected = checkboxes.filter((box) => box.checked);
+    if (!selected.length) return;
+    const form = document.createElement('form');
+    form.method = 'post';
+    form.action = '/admin/discovery/bulk-status';
+    form.style.display = 'none';
+    [
+      ['disaster_id', {{ selected.id }}],
+      ['platform', {{ platform|tojson }}],
+      ['view', {{ view|tojson }}],
+      ['q', {{ q|tojson }}],
+      ['status_action', action],
+    ].forEach(([name, value]) => {
+      const input = document.createElement('input');
+      input.type = 'hidden';
+      input.name = name;
+      input.value = value;
+      form.appendChild(input);
+    });
+    selected.forEach((box) => {
+      const input = document.createElement('input');
+      input.type = 'hidden';
+      input.name = 'candidate_ids';
+      input.value = box.value;
+      form.appendChild(input);
+    });
+    document.body.appendChild(form);
+    remember();
+    form.submit();
+  }
+
   if (bulkForm) {
     bulkForm.addEventListener('submit', remember);
   }
-  if (bulkRelevantForm) {
-    bulkRelevantForm.addEventListener('submit', (event) => {
-      syncBulkForm(bulkRelevantForm);
-      remember();
-      if (!checkboxes.some((box) => box.checked)) {
-        event.preventDefault();
-      }
-    });
+  if (bulkRelevantButton) {
+    bulkRelevantButton.addEventListener('click', () => submitBulk('relevant'));
   }
-  if (bulkIrrelevantForm) {
-    bulkIrrelevantForm.addEventListener('submit', (event) => {
-      syncBulkForm(bulkIrrelevantForm);
-      remember();
-      if (!checkboxes.some((box) => box.checked)) {
-        event.preventDefault();
-      }
-    });
+  if (bulkIrrelevantButton) {
+    bulkIrrelevantButton.addEventListener('click', () => submitBulk('irrelevant'));
   }
   checkboxes.forEach((box) => box.addEventListener('change', syncSelectionCount));
   if (selectAll) {

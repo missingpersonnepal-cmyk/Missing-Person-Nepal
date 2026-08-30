@@ -84,4 +84,5 @@ def next_case_number(db: Session, disaster: Disaster) -> str:
 
 
 def render(request: Request, template: str, **context: Any) -> HTMLResponse:
+    context.setdefault("admin_username", admin_username(request))
     return TEMPLATES.TemplateResponse(request=request, name=template, context=context)

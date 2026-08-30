@@ -8,10 +8,12 @@
 </head>
 <body>
 <header>
-  <div class="container">
-    <a href="/"><strong>Missing Persons Hub</strong></a>
-    <a href="/report">Report Missing Person</a>
-    {% if request.session.get('admin') %}<a href="/admin">Admin</a>{% endif %}
+  <div class="container site-header">
+    <a class="brand" href="/"><span class="brand-mark">N</span><span class="brand-text">Nepal Missing Persons Hub</span></a>
+    <nav class="primary-nav" aria-label="Primary navigation">
+      {% if request.session.get('admin') %}<a href="/admin">Admin workspace</a>{% endif %}
+      <a class="nav-cta" href="/report">Report missing person</a>
+    </nav>
   </div>
 </header>
 <main class="container">
