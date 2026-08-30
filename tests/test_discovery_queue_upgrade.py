@@ -1,5 +1,5 @@
 from app.database import SessionLocal
-from app.models import DiscoveryCandidate
+from app.models import DiscoveryCandidate, MissingPerson
 
 
 def create_event(client):
@@ -74,6 +74,36 @@ def test_findings_name_search(admin_client):
     assert "Rajan Shrestha" not in page.text
 
 
+def test_exact_published_name_is_isolated_in_duplicate_queue(admin_client):
+    create_event(admin_client)
+    add_candidate(admin_client)
+    with SessionLocal() as db:
+        db.add(MissingPerson(
+            case_number="RF-0001",
+            disaster_id=1,
+            name="Rajan Shrestha",
+            last_seen_location="Timure",
+            published=True,
+        ))
+        db.commit()
+
+    response = admin_client.post(
+        "/admin/discovery/1/status",
+        data={"status_action": "relevant", "platform": "facebook", "view": "review"},
+        follow_redirects=False,
+    )
+
+    assert response.status_code == 303
+    assert "view=duplicates" in response.headers["location"]
+    with SessionLocal() as db:
+        assert db.get(DiscoveryCandidate, 1).status == "possible_duplicate"
+    page = admin_client.get(
+        "/admin/discovery?disaster_id=1&platform=facebook&view=duplicates"
+    )
+    assert "Rajan Shrestha" in page.text
+    assert "Possible Duplicate Sources" in page.text
+
+
 def test_bulk_relevant_and_irrelevant_actions(admin_client):
     create_event(admin_client)
     add_candidate(admin_client, title="Person Missing One")
@@ -116,3 +146,21 @@ def test_discovery_queue_template_has_bulk_controls():
     assert "Mark selected Relevant" in template
     assert "Mark selected Irrelevant" in template
     assert "candidate-checkbox" in template
+    assert 'name="status_action" value="prefill"' in template
+    assert "{% elif c.status == 'relevant' %}" in template
+
+
+def test_one_click_prefill_opens_review_with_automatic_prefill(admin_client):
+    create_event(admin_client)
+    add_candidate(admin_client)
+
+    response = admin_client.post(
+        "/admin/discovery/1/status",
+        data={"status_action": "prefill", "platform": "facebook", "view": "review"},
+        follow_redirects=False,
+    )
+
+    assert response.status_code == 303
+    assert response.headers["location"] == "/admin/discovery/1?auto_prefill=1#chatgpt-prefill"
+    with SessionLocal() as db:
+        assert db.get(DiscoveryCandidate, 1).status == "relevant"

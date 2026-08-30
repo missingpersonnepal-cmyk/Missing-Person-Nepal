@@ -82,6 +82,15 @@ def _exact_name_matches(db, disaster_id: int, name: str) -> list[MissingPerson]:
     ]
 
 
+def _exact_published_name_matches(
+    db, disaster_id: int, name: str
+) -> list[MissingPerson]:
+    return [
+        person for person in _exact_name_matches(db, disaster_id, name)
+        if person.published
+    ]
+
+
 def _pending_name_matches(db, disaster_id: int, name: str) -> list[Submission]:
     folded = name.strip().casefold()
     if not folded:
@@ -884,7 +893,7 @@ def discovery_page(
     if gate:
         return gate
 
-    allowed_views = {"review", "relevant", "irrelevant", "processed"}
+    allowed_views = {"review", "relevant", "duplicates", "irrelevant", "processed"}
     view = view.casefold().strip()
     if view not in allowed_views:
         view = "review"
@@ -916,6 +925,7 @@ def discovery_page(
         queue_counts = {
             "review": 0,
             "relevant": 0,
+            "duplicates": 0,
             "irrelevant": 0,
             "processed": 0,
         }
@@ -979,6 +989,7 @@ def discovery_page(
             status_groups = {
                 "review": ["new", "needs_ai"],
                 "relevant": ["relevant"],
+                "duplicates": ["possible_duplicate"],
                 "irrelevant": ["irrelevant", "rejected"],
                 "processed": ["reviewed"],
             }
@@ -1439,8 +1450,13 @@ async def discovery_candidate_status(request: Request, candidate_id: int):
         if candidate is None:
             return HTMLResponse("Not found", status_code=404)
 
-        if action == "relevant":
-            candidate.status = "relevant"
+        if action in {"relevant", "prefill"}:
+            detected_names = extract_candidate_people_names(candidate)
+            has_published_exact_match = any(
+                _exact_published_name_matches(db, candidate.disaster_id, detected_name)
+                for detected_name in detected_names
+            )
+            candidate.status = "possible_duplicate" if has_published_exact_match else "relevant"
         elif action == "irrelevant":
             candidate.status = "irrelevant"
         elif action == "restore":
@@ -1449,6 +1465,8 @@ async def discovery_candidate_status(request: Request, candidate_id: int):
             candidate.status = "reviewed"
         elif action == "reopen":
             candidate.status = "relevant"
+        elif action == "duplicate":
+            candidate.status = "possible_duplicate"
         else:
             return HTMLResponse("Invalid discovery status", status_code=400)
 
@@ -1465,16 +1483,32 @@ async def discovery_candidate_status(request: Request, candidate_id: int):
         params = {
             "disaster_id": candidate.disaster_id,
             "platform": platform,
-            "view": current_view if current_view in {"review", "relevant", "irrelevant", "processed"} else "review",
+            "view": current_view if current_view in {"review", "relevant", "duplicates", "irrelevant", "processed"} else "review",
         }
         if q:
             params["q"] = q
 
-    if action == "relevant":
+    if action == "prefill" and candidate.status == "relevant":
+        return RedirectResponse(
+            f"/admin/discovery/{candidate_id}?auto_prefill=1#chatgpt-prefill",
+            status_code=303,
+        )
+
+    if action == "relevant" and candidate.status == "relevant":
         # Relevant is the hand-off point from discovery triage into
         # detailed source review and ChatGPT-assisted prefill.
         return RedirectResponse(
             f"/admin/discovery/{candidate_id}#chatgpt-prefill",
+            status_code=303,
+        )
+
+    if action in {"relevant", "prefill"} and candidate.status == "possible_duplicate":
+        return RedirectResponse(
+            "/admin/discovery?" + urlencode({
+                "disaster_id": candidate.disaster_id,
+                "platform": platform,
+                "view": "duplicates",
+            }),
             status_code=303,
         )
 
@@ -1596,21 +1630,12 @@ def discovery_candidate_duplicate_check(
         if candidate is None:
             return JSONResponse({"error": "not found"}, status_code=404)
 
-        exact = _exact_name_matches(db, candidate.disaster_id, name)
-        fuzzy = find_duplicates(
-            db,
-            disaster_id=candidate.disaster_id,
-            name=name,
-            location=location,
-            age=age,
-            phone=phone,
-        ) if name.strip() else []
+        exact = _exact_published_name_matches(db, candidate.disaster_id, name)
         pending = _pending_name_matches(db, candidate.disaster_id, name)
 
-        fuzzy_map = {person.id: score for person, score in fuzzy}
         people = []
         seen_ids: set[int] = set()
-        for person in exact + [person for person, _ in fuzzy]:
+        for person in exact:
             if person.id in seen_ids:
                 continue
             seen_ids.add(person.id)
@@ -1627,8 +1652,9 @@ def discovery_candidate_duplicate_check(
                     "name": person.name,
                     "age": person.age,
                     "last_seen_location": person.last_seen_location,
-                    "score": 100.0 if person in exact else fuzzy_map.get(person.id, 0.0),
-                    "exact_name": person in exact,
+                    "score": 100.0,
+                    "exact_name": True,
+                    "public_url": f"/person/{person.case_number}",
                     "source_already_attached": has_source,
                 }
             )
@@ -1657,6 +1683,7 @@ async def discovery_candidate_review(
     batch_published: int | None = None,
     batch_duplicates: int | None = None,
     batch_skipped: int | None = None,
+    auto_prefill: int | None = None,
 ):
     gate = admin_gate(request)
     if gate:
@@ -1746,36 +1773,6 @@ async def discovery_candidate_review(
             if item.casefold() not in source_submission_names
         ]
 
-        related_posts_by_person: dict[str, list[DiscoveryCandidate]] = {
-            item: [] for item in detected_people
-        }
-        if detected_people:
-            name_filters = []
-            for person_name in detected_people:
-                pattern = f"%{person_name}%"
-                name_filters.extend(
-                    [
-                        DiscoveryCandidate.title.ilike(pattern),
-                        DiscoveryCandidate.snippet.ilike(pattern),
-                    ]
-                )
-            related_candidates = db.scalars(
-                select(DiscoveryCandidate)
-                .where(
-                    DiscoveryCandidate.disaster_id == candidate.disaster_id,
-                    DiscoveryCandidate.id != candidate.id,
-                    or_(*name_filters),
-                )
-                .order_by(DiscoveryCandidate.found_at.desc())
-                .limit(30)
-            ).all()
-            for person_name in detected_people:
-                folded_name = person_name.casefold()
-                related_posts_by_person[person_name] = [
-                    item for item in related_candidates
-                    if folded_name in f"{item.title or ''} {item.snippet or ''}".casefold()
-                ][:8]
-
         if (
             created
             and remaining_people
@@ -1787,7 +1784,7 @@ async def discovery_candidate_review(
             # suggestions and must still be checked by the operator.
             prefill["name"] = remaining_people[0]
 
-        exact_duplicates = _exact_name_matches(
+        exact_duplicates = _exact_published_name_matches(
             db,
             candidate.disaster_id,
             str(prefill.get("name") or ""),
@@ -1815,7 +1812,6 @@ async def discovery_candidate_review(
             exact_duplicates=exact_duplicates,
             pending_duplicates=pending_duplicates,
             source_submission_names=source_submission_names,
-            related_posts_by_person=related_posts_by_person,
             chatgpt_prefill_prompt=chatgpt_prefill_prompt,
             openai_prefill_status=openai_prefill_status(),
             created=bool(created),
@@ -1824,6 +1820,7 @@ async def discovery_candidate_review(
             batch_published=batch_published or 0,
             batch_duplicates=batch_duplicates or 0,
             batch_skipped=batch_skipped or 0,
+            auto_prefill=bool(auto_prefill),
         )
 
 

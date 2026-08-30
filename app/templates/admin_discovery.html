@@ -41,6 +41,7 @@
   <div class="queue-nav">
     <a href="{{ queue_links.review }}"><span>To Review</span><span class="queue-count">{{ queue_counts.review }}</span></a>
     <a href="{{ queue_links.relevant }}"><span>Relevant</span><span class="queue-count">{{ queue_counts.relevant }}</span></a>
+    <a href="{{ queue_links.duplicates }}"><span>Possible Duplicates</span><span class="queue-count">{{ queue_counts.duplicates }}</span></a>
     <a href="{{ queue_links.irrelevant }}"><span>Irrelevant</span><span class="queue-count">{{ queue_counts.irrelevant }}</span></a>
     <a href="{{ queue_links.processed }}"><span>Done Posts</span><span class="queue-count">{{ queue_counts.processed }}</span></a>
   </div>
@@ -221,7 +222,8 @@
   <p><a href="/admin/ai-review?disaster_id={{ selected.id }}&platform={{ platform }}">Open manual Free AI Review fallback</a></p>
 </details>
 
-<h2>{% if view == 'review' %}To Review{% elif view == 'relevant' %}Relevant Findings{% elif view == 'irrelevant' %}Irrelevant Archive{% else %}Done Posts{% endif %}</h2>
+<h2>{% if view == 'review' %}To Review{% elif view == 'relevant' %}Relevant Findings{% elif view == 'duplicates' %}Possible Duplicate Sources{% elif view == 'irrelevant' %}Irrelevant Archive{% else %}Done Posts{% endif %}</h2>
+{% if view == 'duplicates' %}<p class="muted">These sources exactly matched a published person's name. Review each source before attaching it to the published case or restoring it as a separate report.</p>{% endif %}
 
 <div class="card" id="bulk-discovery-form">
   <input type="hidden" name="disaster_id" value="{{ selected.id }}">
@@ -266,8 +268,17 @@
           </form>
         {% elif c.status == 'relevant' %}
           <form class="discovery-status-form" method="post" action="/admin/discovery/{{ c.id }}/status" style="display:inline">
+            <input type="hidden" name="status_action" value="prefill"><input type="hidden" name="platform" value="{{ platform }}"><input type="hidden" name="view" value="{{ view }}"><input type="hidden" name="q" value="{{ q }}">
+            <button title="Open this source and automatically extract all missing-person details">AI Prefill</button>
+          </form>
+          <form class="discovery-status-form" method="post" action="/admin/discovery/{{ c.id }}/status" style="display:inline">
             <input type="hidden" name="status_action" value="irrelevant"><input type="hidden" name="platform" value="{{ platform }}"><input type="hidden" name="view" value="{{ view }}"><input type="hidden" name="q" value="{{ q }}">
             <button class="secondary">Not relevant</button>
+          </form>
+        {% elif c.status == 'possible_duplicate' %}
+          <form class="discovery-status-form" method="post" action="/admin/discovery/{{ c.id }}/status" style="display:inline">
+            <input type="hidden" name="status_action" value="reopen"><input type="hidden" name="platform" value="{{ platform }}"><input type="hidden" name="view" value="{{ view }}"><input type="hidden" name="q" value="{{ q }}">
+            <button class="secondary">Restore as separate review</button>
           </form>
         {% elif c.status in ['irrelevant', 'rejected'] %}
           <form class="discovery-status-form" method="post" action="/admin/discovery/{{ c.id }}/status" style="display:inline">

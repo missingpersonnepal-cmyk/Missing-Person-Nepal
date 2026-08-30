@@ -70,6 +70,13 @@
     <input type="hidden" name="view" value="processed">
     <button>Reopen This Post</button>
   </form>
+  {% elif candidate.status == 'possible_duplicate' %}
+  <form method="post" action="/admin/discovery/{{ candidate.id }}/status">
+    <input type="hidden" name="status_action" value="reopen">
+    <input type="hidden" name="platform" value="{{ candidate.platform }}">
+    <input type="hidden" name="view" value="duplicates">
+    <button class="secondary">Restore as a separate review</button>
+  </form>
   {% endif %}
 </div>
 
@@ -182,38 +189,6 @@
       {% if person_name.casefold() in source_submission_names %}
         <span class="badge">entry already created from this post</span>
       {% endif %}
-      {% set related_posts = related_posts_by_person.get(person_name, []) %}
-      {% if related_posts %}
-        <button type="button" class="button secondary related-posts-trigger" data-dialog="related-posts-{{ loop.index }}">
-          Review {{ related_posts|length }} matching post{% if related_posts|length != 1 %}s{% endif %}
-        </button>
-        <dialog class="related-posts-dialog" id="related-posts-{{ loop.index }}">
-          <div class="related-posts-dialog__header">
-            <div>
-              <div class="eyebrow">Possible duplicate evidence</div>
-              <h2>Other posts mentioning {{ person_name }}</h2>
-            </div>
-            <button type="button" class="secondary related-posts-close" aria-label="Close matching posts">Close</button>
-          </div>
-          <p class="muted">Compare the details below before deciding whether these posts describe the same person. A name match alone is not confirmation.</p>
-          <div class="related-posts-list">
-            {% for related in related_posts %}
-            <article class="related-post-card">
-              <div class="related-post-card__meta">
-                <span class="badge">{{ related.platform }}</span>
-                <span class="badge">{{ related.status }}</span>
-              </div>
-              <h3>{{ related.title or 'Untitled public post' }}</h3>
-              <p>{{ related.snippet or 'No indexed post text is available. Open the original source to compare it.' }}</p>
-              <div class="inline">
-                <a class="button" href="/admin/discovery/{{ related.id }}" target="_blank" rel="noopener">Open review</a>
-                <a class="button secondary" href="{{ related.url }}" target="_blank" rel="noopener noreferrer">Open original post</a>
-              </div>
-            </article>
-            {% endfor %}
-          </div>
-        </dialog>
-      {% endif %}
     </li>
     {% endfor %}
   </ul>
@@ -317,8 +292,10 @@
         <input type="radio" name="duplicate_action" value="attach:{{ item.id }}" required>
         Attach this source to {{ item.case_number }} — {{ item.name }}
         {% if item.last_seen_location %} — {{ item.last_seen_location }}{% endif %}
+        <a href="/person/{{ item.case_number }}" target="_blank" rel="noopener">View published case</a>
       </label>
       {% endfor %}
+      <button type="button" class="secondary isolate-duplicate-source">Set aside in Possible Duplicates</button>
       <label style="display:block; margin:8px 0">
         <input type="radio" name="duplicate_action" value="continue" required>
         This is a different person with the same name. Continue with a separate pending entry.
@@ -412,20 +389,6 @@
 
 <script>
 (function () {
-  document.querySelectorAll('.related-posts-trigger').forEach((button) => {
-    button.addEventListener('click', () => {
-      const dialog = document.getElementById(button.dataset.dialog);
-      if (dialog && typeof dialog.showModal === 'function') dialog.showModal();
-    });
-  });
-  document.querySelectorAll('.related-posts-dialog').forEach((dialog) => {
-    const closeButton = dialog.querySelector('.related-posts-close');
-    if (closeButton) closeButton.addEventListener('click', () => dialog.close());
-    dialog.addEventListener('click', (event) => {
-      if (event.target === dialog) dialog.close();
-    });
-  });
-
   const candidateId = {{ candidate.id }};
   const cacheKey = `missing-person-ai-prefill-${candidateId}`;
   const alreadyEnteredNames = new Set({{ source_submission_names|list|tojson }});
@@ -726,22 +689,17 @@
       if (!response.ok) return;
       const data = await response.json();
       const exact = (data.people || []).filter((item) => item.exact_name);
-      const similar = (data.people || []).filter((item) => !item.exact_name && item.score >= 70);
-      if (!exact.length && !similar.length && !(data.pending || []).length) {
+      if (!exact.length && !(data.pending || []).length) {
         warning.style.display = 'none'; warning.innerHTML = ''; return;
       }
       let html = '<h3>⚠ Possible duplicate person</h3>';
       if (exact.length) {
         html += '<p><strong>The same name already exists.</strong> Attach this source if it is the same person.</p>';
         for (const item of exact) {
-          html += `<label style="display:block; margin:8px 0"><input type="radio" name="duplicate_action" value="attach:${item.id}" required> Attach to ${escapeHtml(item.case_number)} — ${escapeHtml(item.name)}${item.last_seen_location ? ' — ' + escapeHtml(item.last_seen_location) : ''}</label>`;
+          html += `<label style="display:block; margin:8px 0"><input type="radio" name="duplicate_action" value="attach:${item.id}" required> Attach to ${escapeHtml(item.case_number)} — ${escapeHtml(item.name)}${item.last_seen_location ? ' — ' + escapeHtml(item.last_seen_location) : ''} <a href="${escapeHtml(item.public_url)}" target="_blank" rel="noopener">View published case</a></label>`;
         }
+        html += '<button type="button" class="secondary isolate-duplicate-source">Set aside in Possible Duplicates</button>';
         html += '<label style="display:block; margin:8px 0"><input type="radio" name="duplicate_action" value="continue" required> Different person with the same name.</label>';
-      }
-      if (similar.length) {
-        html += '<p><strong>Similar existing cases:</strong></p><ul>';
-        similar.forEach((item) => { html += `<li>${escapeHtml(item.case_number)} — ${escapeHtml(item.name)} — ${escapeHtml(item.score)}%</li>`; });
-        html += '</ul>';
       }
       if ((data.pending || []).length) {
         html += '<p><strong>A pending record with this name also exists.</strong></p>';
@@ -753,6 +711,20 @@
       // Server-side duplicate protections remain authoritative.
     }
   }
+
+  document.addEventListener('click', (event) => {
+    const button = event.target.closest('.isolate-duplicate-source');
+    if (!button) return;
+    const form = document.createElement('form');
+    form.method = 'post';
+    form.action = `/admin/discovery/${candidateId}/status`;
+    [['status_action', 'duplicate'], ['platform', {{ candidate.platform|tojson }}], ['view', 'duplicates']].forEach(([name, value]) => {
+      const input = document.createElement('input');
+      input.type = 'hidden'; input.name = name; input.value = value; form.appendChild(input);
+    });
+    document.body.appendChild(form);
+    form.submit();
+  });
 
   function scheduleCheck() {
     clearTimeout(timer);
@@ -794,6 +766,9 @@
   });
 
   restoreCachedPayload();
+  {% if auto_prefill %}
+  if (!aiPeople.length && apiRun && !apiRun.disabled) runBackendPrefill();
+  {% endif %}
   checkDuplicates();
 })();
 </script>
