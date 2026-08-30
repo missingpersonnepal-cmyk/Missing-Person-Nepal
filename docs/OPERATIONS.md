@@ -1,15 +1,16 @@
 # V0 Operations
 
-## Initial setup with the existing Aiven PostgreSQL database
+## Initial setup with the existing Supabase PostgreSQL database
 
-1. Obtain the existing Aiven PostgreSQL service URI from the authorized environment.
-2. Configure `DATABASE_URL` using the SQLAlchemy psycopg driver.
+1. Obtain the existing Supabase PostgreSQL connection string from the authorized environment.
+2. Configure `DATABASE_URL`; the app will normalize plain PostgreSQL URLs to the SQLAlchemy psycopg driver.
 3. Set a strong `SESSION_SECRET` and initial admin credentials.
 4. Run `alembic upgrade head`.
 5. Start the FastAPI application.
 6. Confirm `/health` returns `{"status":"ok"}`.
-7. Log in to `/admin/login`.
-8. Create the active disaster and affected locations.
+7. Confirm `/ready` returns `{"status":"ok","database":"up"}` once the database is reachable.
+8. Log in to `/admin/login`.
+9. Create the active disaster and affected locations.
 
 No additional database service is required.
 
@@ -34,7 +35,7 @@ Every export generates an audit-log entry. The export may include admin-only res
 
 ## Backup
 
-For the review-stage V0, rely on the existing Aiven backup policy plus a periodic admin export for operational portability. Before public production, define tested database restore and media/object-storage backup procedures.
+For the review-stage V0, rely on the existing Supabase backup policy plus a periodic admin export for operational portability. Before public production, define tested database restore and media/object-storage backup procedures.
 
 ## Current filesystem storage caveat
 

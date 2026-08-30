@@ -13,8 +13,8 @@ class FakeProvider:
                 queries[0],
                 SearchResult(
                     url="https://facebook.com/groups/rasuwa/posts/999",
-                    title="Missing in Rasuwa",
-                    snippet="सम्पर्कविहीन Timure",
+                    title="Missing Person in Rasuwa and Koshi",
+                    snippet="Example Person is सम्पर्कविहीन after Rasuwa and Koshi floods. Contact 9800000000.",
                 ),
             )
         ]

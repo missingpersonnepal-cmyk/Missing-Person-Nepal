@@ -1,0 +1,381 @@
+{% extends "base.html" %}
+{% block content %}
+
+<h1>Review Discovery Candidate</h1>
+
+{% if created %}
+<div class="card" style="border:2px solid #2f855a">
+  <strong>Pending entry created.</strong>
+  This post remains in Relevant until you confirm that every missing person in the post has been handled.
+</div>
+{% endif %}
+
+{% if attached %}
+<div class="card" style="border:2px solid #2f855a">
+  <strong>Source attached to the existing person.</strong>
+  No duplicate missing-person entry was created.
+</div>
+{% endif %}
+
+<div class="card">
+  <p>
+    <span class="badge">{{ candidate.platform }}</span>
+    <span class="badge">{{ candidate.status }}</span>
+    <a href="{{ candidate.url }}" target="_blank" rel="noopener noreferrer">
+      Open original public post
+    </a>
+  </p>
+
+  <h2>{{ candidate.title or 'Untitled result' }}</h2>
+
+  <h3>Public post content available to the system</h3>
+  {% if source_post_text %}
+  <pre class="wrap">{{ source_post_text }}</pre>
+  <p class="muted">
+    Retrieved from public post metadata without logging in. Facebook may still withhold or truncate some content.
+  </p>
+  {% else %}
+  <pre class="wrap">{{ candidate.snippet or '' }}</pre>
+  <p class="muted">
+    Facebook did not expose fuller public text, so this is the best indexed text available to the system.
+  </p>
+  {% endif %}
+
+  {% if candidate.status in ['new', 'needs_ai'] %}
+  <div class="inline" style="margin-top:12px">
+    <form method="post" action="/admin/discovery/{{ candidate.id }}/status">
+      <input type="hidden" name="status_action" value="relevant">
+      <input type="hidden" name="platform" value="{{ candidate.platform }}">
+      <input type="hidden" name="view" value="review">
+      <button>✓ Mark Relevant</button>
+    </form>
+    <form method="post" action="/admin/discovery/{{ candidate.id }}/status">
+      <input type="hidden" name="status_action" value="irrelevant">
+      <input type="hidden" name="platform" value="{{ candidate.platform }}">
+      <input type="hidden" name="view" value="review">
+      <button class="secondary">Mark Irrelevant</button>
+    </form>
+  </div>
+  {% elif candidate.status in ['irrelevant', 'rejected'] %}
+  <form method="post" action="/admin/discovery/{{ candidate.id }}/status">
+    <input type="hidden" name="status_action" value="restore">
+    <input type="hidden" name="platform" value="{{ candidate.platform }}">
+    <input type="hidden" name="view" value="irrelevant">
+    <button>Restore to Review</button>
+  </form>
+  {% elif candidate.status == 'reviewed' %}
+  <form method="post" action="/admin/discovery/{{ candidate.id }}/status">
+    <input type="hidden" name="status_action" value="reopen">
+    <input type="hidden" name="platform" value="{{ candidate.platform }}">
+    <input type="hidden" name="view" value="processed">
+    <button>Reopen This Post</button>
+  </form>
+  {% endif %}
+</div>
+
+{% if multiple_people_signal %}
+<div class="card" style="border:2px solid #b7791f">
+  <h2>⚠ Possible multiple missing people in this post</h2>
+  <p>
+    The public text indicates that this source may report more than one missing person.
+    {% if detected_people|length > 1 %}
+      The system found <strong>{{ detected_people|length }}</strong> explicit names.
+    {% endif %}
+    Treat these as review suggestions, not automatic identity decisions.
+  </p>
+  {% if detected_people %}
+  <ul>
+    {% for person_name in detected_people %}
+    <li>
+      {{ person_name }}
+      {% if person_name.casefold() in source_submission_names %}
+        <span class="badge">entry already created from this post</span>
+      {% endif %}
+    </li>
+    {% endfor %}
+  </ul>
+  {% else %}
+  <p class="muted">
+    The post uses plural/family wording, but the system could not safely separate every person's name.
+    Review the public text and source image for additional explicitly named people.
+  </p>
+  {% endif %}
+
+  {% if remaining_people %}
+  <p><strong>Still to review from this source:</strong> {{ remaining_people|join(', ') }}</p>
+  {% else %}
+  <p><strong>All detected names already have an entry from this source.</strong></p>
+  {% endif %}
+</div>
+{% endif %}
+
+{% if source_image_url %}
+<div class="card">
+  <h2>Picture found in public source</h2>
+  <img
+    src="{{ source_image_url }}"
+    alt="Image attached to the public missing-person post"
+    style="max-width:520px; max-height:520px; object-fit:contain; border-radius:8px"
+  >
+  <p class="muted">
+    Source evidence only. OCR may read written text from this image, but the system does not identify a person from their face or infer identity from appearance.
+  </p>
+</div>
+{% endif %}
+
+{% if ocr_text or ocr_detail %}
+<div class="card">
+  <h2>Text detected in source image</h2>
+  {% if ocr_detail %}<p class="muted">{{ ocr_detail }}</p>{% endif %}
+  {% if ocr_text %}
+  <pre class="wrap">{{ ocr_text }}</pre>
+  {% else %}
+  <p>No OCR text was detected.</p>
+  {% endif %}
+</div>
+{% endif %}
+
+<form method="post" action="/admin/discovery/{{ candidate.id }}/submission" class="card" id="person-entry-form">
+  <h2>Create or attach missing-person record</h2>
+  <p class="muted">
+    Review every field. If the same name already exists, the system will warn you and let you attach this new source link instead of creating a duplicate person.
+  </p>
+
+  {% if source_post_text %}
+  <textarea name="source_post_text" style="display:none">{{ source_post_text }}</textarea>
+  {% endif %}
+  {% if ocr_text %}
+  <textarea name="ocr_text" style="display:none">{{ ocr_text }}</textarea>
+  {% endif %}
+
+  {% if multiple_people_signal and remaining_people %}
+  <label>Choose a detected person from this post</label>
+  <select id="detected-person-picker">
+    <option value="">Select a name or type manually below</option>
+    {% for person_name in remaining_people %}
+    <option value="{{ person_name }}">{{ person_name }}</option>
+    {% endfor %}
+  </select>
+  <p class="muted">Selecting a name changes only the Name field. Re-check age, location, contact and all other details for that specific person.</p>
+  {% endif %}
+
+  <div class="inline">
+    <div>
+      <label>Name *</label>
+      <input id="person-name" name="name" value="{{ prefill.name or '' }}" required>
+    </div>
+    <div>
+      <label>Nepali name</label>
+      <input name="name_ne" value="{{ prefill.name_ne or '' }}">
+    </div>
+    <div>
+      <label>Age</label>
+      <input id="person-age" type="number" name="age" value="{{ prefill.age or '' }}">
+    </div>
+  </div>
+
+  <div
+    id="duplicate-warning"
+    class="card"
+    style="{% if exact_duplicates or pending_duplicates %}display:block;{% else %}display:none;{% endif %} border:2px solid #c05621; margin-top:12px"
+  >
+    {% if exact_duplicates %}
+      <h3>⚠ Possible duplicate person</h3>
+      <p>
+        <strong>The same name already exists in this disaster.</strong>
+        If this is another public link for the same person, attach the source instead of creating a duplicate person.
+      </p>
+      {% for item in exact_duplicates %}
+      <label style="display:block; margin:8px 0">
+        <input type="radio" name="duplicate_action" value="attach:{{ item.id }}" required>
+        Attach this source to {{ item.case_number }} — {{ item.name }}
+        {% if item.last_seen_location %} — {{ item.last_seen_location }}{% endif %}
+      </label>
+      {% endfor %}
+      <label style="display:block; margin:8px 0">
+        <input type="radio" name="duplicate_action" value="continue" required>
+        This is a different person with the same name. Continue with a separate pending entry.
+      </label>
+    {% elif pending_duplicates %}
+      <h3>⚠ Pending duplicate-name warning</h3>
+      <p>
+        A pending submission already uses this name. Check Pending Submissions before making another record.
+      </p>
+      <ul>
+        {% for item in pending_duplicates %}
+        <li>Submission #{{ item.id }} — {{ item.name }}</li>
+        {% endfor %}
+      </ul>
+      <label style="display:block; margin:8px 0">
+        <input type="radio" name="duplicate_action" value="continue" required>
+        I reviewed the pending match and still want a separate pending entry.
+      </label>
+    {% endif %}
+  </div>
+
+  <div class="inline">
+    <div>
+      <label>Gender</label>
+      <select name="gender">
+        <option value="" {% if not prefill.gender %}selected{% endif %}>Unknown</option>
+        <option value="Male" {% if prefill.gender == 'Male' %}selected{% endif %}>Male</option>
+        <option value="Female" {% if prefill.gender == 'Female' %}selected{% endif %}>Female</option>
+      </select>
+    </div>
+    <div>
+      <label>Last-seen date</label>
+      <input type="date" name="last_seen_date" value="{{ prefill.last_seen_date or '' }}">
+    </div>
+    <div>
+      <label>Last-seen time</label>
+      <input type="time" name="last_seen_time" value="{{ prefill.last_seen_time or '' }}">
+    </div>
+  </div>
+
+  <label>Last-seen / affected location *</label>
+  <input id="person-location" name="last_seen_location" value="{{ prefill.last_seen_location or '' }}" required>
+
+  <label>Clothing</label>
+  <textarea name="clothing">{{ prefill.clothing or '' }}</textarea>
+
+  <label>Identification / source details</label>
+  <textarea name="identification_details" rows="10">{{ prefill.identification_details or '' }}</textarea>
+
+  <label>Public information contact</label>
+  <input id="person-phone" name="public_contact_number" value="{{ prefill.public_contact_number or '' }}">
+
+  {% if source_image_url %}
+  <input type="hidden" name="source_image_url" value="{{ source_image_url }}">
+  <p>
+    <label>
+      <input type="checkbox" name="include_source_image" value="1" checked>
+      Include this reviewed source image in the pending missing-person record
+    </label>
+  </p>
+  {% endif %}
+
+  {% if candidate.status not in ['irrelevant', 'rejected'] %}
+  <button id="create-entry-button">Create Pending Entry</button>
+  {% else %}
+  <p class="muted">Restore this candidate to review before creating a submission.</p>
+  {% endif %}
+</form>
+
+{% if candidate.status not in ['irrelevant', 'rejected', 'reviewed'] %}
+<div class="card">
+  <h2>Finished reviewing this post?</h2>
+  <p>
+    Only mark the post processed after every missing person mentioned in it has either been entered, attached to an existing person, or intentionally skipped after review.
+  </p>
+  <form method="post" action="/admin/discovery/{{ candidate.id }}/status">
+    <input type="hidden" name="status_action" value="processed">
+    <input type="hidden" name="platform" value="{{ candidate.platform }}">
+    <input type="hidden" name="view" value="relevant">
+    <button>✓ Mark Whole Post Processed</button>
+  </form>
+</div>
+{% endif %}
+
+<p class="muted">
+  The system reads only public text and written text detected in source images. It does not use facial recognition or infer identity from appearance.
+</p>
+
+<script>
+(function () {
+  const nameInput = document.getElementById('person-name');
+  const ageInput = document.getElementById('person-age');
+  const locationInput = document.getElementById('person-location');
+  const phoneInput = document.getElementById('person-phone');
+  const warning = document.getElementById('duplicate-warning');
+  const picker = document.getElementById('detected-person-picker');
+  let timer = null;
+
+  function escapeHtml(value) {
+    const div = document.createElement('div');
+    div.textContent = value == null ? '' : String(value);
+    return div.innerHTML;
+  }
+
+  async function checkDuplicates() {
+    const name = nameInput.value.trim();
+    if (!name) {
+      warning.style.display = 'none';
+      warning.innerHTML = '';
+      return;
+    }
+
+    const params = new URLSearchParams({
+      name,
+      location: locationInput.value || '',
+      phone: phoneInput.value || ''
+    });
+    if (ageInput.value) params.set('age', ageInput.value);
+
+    try {
+      const response = await fetch(
+        `/admin/discovery/{{ candidate.id }}/duplicate-check?${params.toString()}`,
+        {credentials: 'same-origin'}
+      );
+      if (!response.ok) return;
+      const data = await response.json();
+      const exact = (data.people || []).filter((item) => item.exact_name);
+      const similar = (data.people || []).filter((item) => !item.exact_name && item.score >= 70);
+
+      if (!exact.length && !similar.length && !(data.pending || []).length) {
+        warning.style.display = 'none';
+        warning.innerHTML = '';
+        return;
+      }
+
+      let html = '<h3>⚠ Possible duplicate person</h3>';
+      if (exact.length) {
+        html += '<p><strong>The same name already exists in this disaster.</strong> If this is another link for the same person, attach the source instead of creating another person.</p>';
+        for (const item of exact) {
+          html += `<label style="display:block; margin:8px 0"><input type="radio" name="duplicate_action" value="attach:${item.id}" required> Attach this source to ${escapeHtml(item.case_number)} — ${escapeHtml(item.name)}${item.last_seen_location ? ' — ' + escapeHtml(item.last_seen_location) : ''}${item.source_already_attached ? ' (source already attached)' : ''}</label>`;
+        }
+        html += '<label style="display:block; margin:8px 0"><input type="radio" name="duplicate_action" value="continue" required> This is a different person with the same name. Continue with a separate pending entry.</label>';
+      }
+      if (similar.length) {
+        html += '<p><strong>Similar existing cases:</strong></p><ul>';
+        for (const item of similar) {
+          html += `<li>${escapeHtml(item.case_number)} — ${escapeHtml(item.name)} — match ${escapeHtml(item.score)}%</li>`;
+        }
+        html += '</ul>';
+      }
+      if ((data.pending || []).length) {
+        html += '<p><strong>Pending submissions with this name also exist.</strong> Check them before creating another entry.</p>';
+        if (!exact.length) {
+          html += '<label style="display:block; margin:8px 0"><input type="radio" name="duplicate_action" value="continue" required> I reviewed the pending match and still want a separate pending entry.</label>';
+        }
+      }
+
+      warning.innerHTML = html;
+      warning.style.display = 'block';
+    } catch (error) {
+      // Duplicate check is advisory in the UI; the server still enforces exact matches.
+    }
+  }
+
+  function scheduleCheck() {
+    clearTimeout(timer);
+    timer = setTimeout(checkDuplicates, 250);
+  }
+
+  [nameInput, ageInput, locationInput, phoneInput].forEach((element) => {
+    if (element) element.addEventListener('input', scheduleCheck);
+  });
+
+  if (picker) {
+    picker.addEventListener('change', function () {
+      if (this.value) {
+        nameInput.value = this.value;
+        scheduleCheck();
+      }
+    });
+  }
+
+  checkDuplicates();
+})();
+</script>
+
+{% endblock %}

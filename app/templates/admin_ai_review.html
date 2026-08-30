@@ -1,0 +1,109 @@
+{% extends "base.html" %}
+{% block content %}
+
+<h1>Free AI Review</h1>
+
+<div class="card">
+  <h2>{{ disaster.name }}</h2>
+
+  <p>
+    This workflow does not call an AI API.
+    It prepares a prompt for a free interactive AI session.
+  </p>
+
+  <p class="muted">
+    {{ candidates|length }} new {{ platform }}
+    discovery candidates are included.
+    AI results remain pending until an administrator approves
+    or attaches them.
+  </p>
+
+  <p>
+    <a
+      href="https://chatgpt.com/"
+      target="_blank"
+      rel="noopener noreferrer"
+    >Open ChatGPT</a>
+  </p>
+</div>
+
+<div class="card">
+  <h2>Step 1: Copy review prompt</h2>
+
+  <textarea
+    id="aiPrompt"
+    rows="24"
+    readonly
+  >{{ prompt }}</textarea>
+
+  <button
+    type="button"
+    onclick="copyAiPrompt()"
+  >Copy AI Review Prompt</button>
+
+  <span
+    id="copyStatus"
+    class="muted"
+  ></span>
+</div>
+
+<form
+  method="post"
+  action="/admin/ai-review/import"
+  class="card"
+>
+  <h2>Step 2: Import AI result</h2>
+
+  <p class="muted">
+    Paste only the JSON returned by the AI.
+    The server validates candidate IDs against the database.
+    The AI cannot change source URLs or event ownership.
+  </p>
+
+  <input
+    type="hidden"
+    name="disaster_id"
+    value="{{ disaster.id }}"
+  >
+
+  <input
+    type="hidden"
+    name="platform"
+    value="{{ platform }}"
+  >
+
+  <textarea
+    name="result_json"
+    rows="24"
+    required
+    placeholder='{"results": [...]}'
+  ></textarea>
+
+  <button>
+    Import as Pending Submissions
+  </button>
+</form>
+
+<p>
+  <a href="/admin/discovery?disaster_id={{ disaster.id }}&platform={{ platform }}">
+    Return to Discovery
+  </a>
+</p>
+
+<script>
+async function copyAiPrompt() {
+  const field = document.getElementById("aiPrompt");
+  const status = document.getElementById("copyStatus");
+
+  try {
+    await navigator.clipboard.writeText(field.value);
+    status.textContent = "Copied.";
+  } catch (error) {
+    field.select();
+    document.execCommand("copy");
+    status.textContent = "Copied.";
+  }
+}
+</script>
+
+{% endblock %}

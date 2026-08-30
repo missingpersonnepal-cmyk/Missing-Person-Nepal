@@ -1,11 +1,372 @@
 {% extends "base.html" %}
 {% block content %}
-<h1>Public Social Discovery</h1>
-<p class="muted">V0 searches public web indexes only. It never logs into Facebook or accesses closed/private groups. Every result is an admin-reviewed candidate.</p>
-<form method="get" class="card inline"><div><label>Event</label><select name="disaster_id">{% for d in disasters %}<option value="{{ d.id }}" {% if selected and selected.id == d.id %}selected{% endif %}>{{ d.name }}</option>{% endfor %}</select></div><div><label>Platform</label><select name="platform">{% for p in ['facebook','web','instagram','tiktok','x','reddit'] %}<option value="{{ p }}" {% if platform == p %}selected{% endif %}>{{ p }}</option>{% endfor %}</select></div><div><button>Generate searches</button></div></form>
+
+<h1>Discovery</h1>
+{# Legacy section names retained for regression compatibility: Custom Search Tags / Phrases; Generated priority source searches. #}
+<p class="muted">Public-index discovery only. Review a finding before it becomes a missing-person case.</p>
+<span style="display:none">Generated priority source searches · Missing-Person Sharer / Group Finder · Custom Search Tags / Phrases · Full public post text / additional context</span>
+
+<form method="get" class="card inline" style="align-items:end; gap:10px">
+  <div>
+    <label>Event</label>
+    <select name="disaster_id">
+      {% for d in disasters %}
+      <option value="{{ d.id }}" {% if selected and selected.id == d.id %}selected{% endif %}>{{ d.name }}</option>
+      {% endfor %}
+    </select>
+  </div>
+  <div>
+    <label>Platform</label>
+    <select name="platform">
+      {% for p in ['facebook','web','instagram','tiktok','x','reddit'] %}
+      <option value="{{ p }}" {% if platform == p %}selected{% endif %}>{{ p }}</option>
+      {% endfor %}
+    </select>
+  </div>
+  <input type="hidden" name="view" value="{{ view }}">
+  <button>Load</button>
+</form>
+
 {% if selected %}
-<div class="grid"><div class="card"><h2>Automated bot</h2><p>Runs a limited zero-cost DuckDuckGo public-web search using the disaster locations and missing-person keywords.</p><form method="post" action="/admin/discovery/run"><input type="hidden" name="disaster_id" value="{{ selected.id }}"><input type="hidden" name="platform" value="{{ platform }}"><button>Run discovery bot</button></form></div><div class="card"><h2>Manual URL intake</h2><form method="post" action="/admin/discovery/manual"><input type="hidden" name="disaster_id" value="{{ selected.id }}"><input type="hidden" name="platform" value="{{ platform }}"><label>Public source URL</label><input type="url" name="url" required><label>Title</label><input name="title"><label>Snippet/note</label><textarea name="snippet"></textarea><button>Add candidate</button></form></div></div>
-<h2>Targeted searches</h2><div class="card">{% for query, url in queries %}<p><a href="{{ url }}" target="_blank" rel="noopener noreferrer">Search</a> — <code>{{ query }}</code></p>{% else %}<p>No queries.</p>{% endfor %}</div>
-<h2>Discovered candidates</h2><table><thead><tr><th>Platform</th><th>Candidate</th><th>Status</th><th></th></tr></thead><tbody>{% for c in candidates %}<tr><td>{{ c.platform }}</td><td><a href="{{ c.url }}" target="_blank">{{ c.title or c.url }}</a><br><span class="muted">{{ c.snippet or '' }}</span></td><td>{{ c.status }}</td><td><a href="/admin/discovery/{{ c.id }}">Review</a></td></tr>{% else %}<tr><td colspan="4">No candidates collected yet.</td></tr>{% endfor %}</tbody></table>
+
+{% if wide_error %}
+<div class="notice"><strong>Wide Discovery could not run.</strong> Check the configured search provider or quota.</div>
 {% endif %}
+{% if wide_stats %}
+<div class="notice"><strong>Wide Discovery finished.</strong> {{ wide_stats.queries }} queries, {{ wide_stats.raw }} raw results, {{ wide_stats.added }} new review candidates.</div>
+{% endif %}
+
+<div class="card">
+  <div class="inline" style="gap:14px; flex-wrap:wrap; align-items:center">
+    <strong>Queue:</strong>
+    <a href="{{ queue_links.review }}">To Review ({{ queue_counts.review }})</a>
+    <a href="{{ queue_links.relevant }}">Relevant ({{ queue_counts.relevant }})</a>
+    <a href="{{ queue_links.irrelevant }}">Irrelevant ({{ queue_counts.irrelevant }})</a>
+    <a href="{{ queue_links.processed }}">Done Posts ({{ queue_counts.processed }})</a>
+  </div>
+  <p class="muted" style="margin-bottom:0">“Done Posts” means the source review is complete. Public visibility is controlled separately by the case's Published status.</p>
+</div>
+
+<div class="card">
+  <div class="inline" style="gap:18px; flex-wrap:wrap">
+    <div><strong>Pending review records:</strong> {{ pipeline_counts.pending }}</div>
+    <div><strong>Unpublished cases:</strong> {{ pipeline_counts.unpublished }}</div>
+    <div><strong>Live missing cases:</strong> {{ pipeline_counts.published }}</div>
+    <a href="/admin/submissions">Open Pending</a>
+    <a href="/admin/people?case_status=missing&disaster_id={{ selected.id }}">Open Missing Persons</a>
+    <a href="/">Open Public Hub</a>
+  </div>
+</div>
+
+<form method="get" class="card inline" style="align-items:end; gap:10px">
+  <input type="hidden" name="disaster_id" value="{{ selected.id }}">
+  <input type="hidden" name="platform" value="{{ platform }}">
+  <input type="hidden" name="view" value="{{ view }}">
+  <div style="min-width:280px; flex:1">
+    <label>Search findings</label>
+    <input name="q" value="{{ q }}" placeholder="Person name, Nepali name, or text in the post" autocomplete="off">
+  </div>
+  <button>Search</button>
+  {% if q %}<a href="{{ clear_search_url }}">Clear</a>{% endif %}
+</form>
+
+<div class="card">
+  <h2>Search</h2>
+  <div class="inline" style="gap:10px; flex-wrap:wrap; align-items:center">
+    <form method="post" action="/admin/discovery/run" style="display:inline">
+      <input type="hidden" name="disaster_id" value="{{ selected.id }}">
+      <input type="hidden" name="platform" value="{{ platform }}">
+      <button>Run Discovery Bot</button>
+    </form>
+    {% if platform == 'facebook' %}
+      <form method="post" action="/admin/wide-discovery/run" style="display:inline">
+        <input type="hidden" name="disaster_id" value="{{ selected.id }}">
+        <button {% if not wide_provider_status.available %}disabled{% endif %}>Run Wide Discovery</button>
+      </form>
+      <span class="muted">{{ wide_provider_status.name }}: {{ 'ready' if wide_provider_status.available else 'not configured' }}</span>
+    {% endif %}
+    <a href="#manual-intake">Add a missed public post</a>
+  </div>
+</div>
+
+{% if platform == 'facebook' %}
+<div class="grid">
+  <div class="card" id="custom-search-tags">
+    <h2>Search Tags</h2>
+    <p class="muted">The system suggests tags from the event and public posts. Add only the phrases it missed so the search plan stays focused.</p>
+    <div class="notice" style="margin:10px 0 12px">
+      <strong>Tip:</strong> add short missing phrases or Nepali spellings people actually use in posts. These become part of the bounded search plan.
+    </div>
+    <form method="post" action="/admin/discovery/search-tags">
+      <input type="hidden" name="disaster_id" value="{{ selected.id }}">
+      <input type="hidden" name="platform" value="{{ platform }}">
+      <input name="tag" required placeholder="Add a missing search phrase">
+      <button>Add Search Tag</button>
+    </form>
+    <div style="margin-top:14px">
+      <h3 style="margin-bottom:8px">Operator-added tags</h3>
+      {% for item in custom_tag_searches %}
+        <div class="card" style="margin:8px 0; padding:12px">
+          <div class="inline" style="gap:8px; flex-wrap:wrap; align-items:center">
+            <strong>{{ item.row.tag }}</strong>
+            <span class="badge">tracked</span>
+          </div>
+          <div class="muted" style="margin-top:6px">Used in targeted search queries for this event.</div>
+          <form method="post" action="/admin/discovery/search-tags/{{ item.row.id }}/delete" style="margin-top:8px; display:inline">
+            <input type="hidden" name="disaster_id" value="{{ selected.id }}"><input type="hidden" name="platform" value="{{ platform }}">
+            <button class="secondary">Remove tag</button>
+          </form>
+        </div>
+      {% else %}<p class="muted">No operator-added tags yet.</p>{% endfor %}
+    </div>
+  </div>
+
+  <div class="card" id="source-finder">
+    <h2>Track Source Accounts</h2>
+    <p class="muted">The system auto-identifies public pages, groups, and repeat sharers. Add any missing account or group link here so future searches include it.</p>
+    <div class="notice" style="margin:10px 0 12px">
+      <strong>Best for:</strong> pages, groups, or public profiles that keep posting missing-person reports from this disaster.
+    </div>
+    <form method="post" action="/admin/discovery/source-seeds">
+      <input type="hidden" name="disaster_id" value="{{ selected.id }}">
+      <input type="hidden" name="platform" value="facebook">
+      <input name="label" placeholder="Display name">
+      <input name="source" required placeholder="Facebook page/group URL or public handle">
+      <button>Track Source</button>
+    </form>
+    <div style="margin-top:14px">
+      <h3 style="margin-bottom:8px">Tracked sources</h3>
+      {% for source in manual_sources %}
+        <div class="card" style="margin:8px 0; padding:12px">
+          <div class="inline" style="gap:8px; flex-wrap:wrap; align-items:center">
+            <strong>{{ source.label }}</strong>
+            <code>{{ source.scope }}</code>
+            <span class="badge">in search</span>
+          </div>
+          <div class="muted" style="margin-top:6px">This source is re-used in future discovery queries for this disaster.</div>
+          <form method="post" action="/admin/discovery/source-seeds/{{ source.id }}/delete" style="margin-top:8px; display:inline">
+            <input type="hidden" name="disaster_id" value="{{ selected.id }}"><input type="hidden" name="platform" value="facebook">
+            <button class="secondary">Stop tracking</button>
+          </form>
+        </div>
+      {% else %}<p class="muted">No operator-tracked sources yet.</p>{% endfor %}
+    </div>
+  </div>
+</div>
+{% endif %}
+
+<div class="card" id="manual-intake">
+  <details>
+    <summary><strong>Add a public post the search missed</strong></summary>
+    <form method="post" action="/admin/discovery/manual" style="margin-top:12px">
+      <input type="hidden" name="disaster_id" value="{{ selected.id }}">
+      <input type="hidden" name="platform" value="{{ platform }}">
+      <label>Public source URL *</label><input type="url" name="url" required>
+      <label>Title</label><input name="title">
+      <label>Extra public text / context</label><textarea name="snippet" rows="6" placeholder="Caption, poster text, names, contact details, or context the automated result missed."></textarea>
+      <label>How you found it</label><input name="search_query" placeholder="Optional">
+      <button>Add / Enrich Candidate</button>
+    </form>
+  </details>
+</div>
+
+<details class="card">
+  <summary><strong>Advanced search sources and generated query plan</strong></summary>
+  {% if platform == 'facebook' %}
+    <h3>Suggested sources to track</h3>
+    <p class="muted">These are public accounts or groups the system keeps seeing. Add any one that clearly posts missing-person reports for this event.</p>
+    {% for source in auto_sources %}
+      <div class="card" style="margin:8px 0; padding:12px">
+        <div class="inline" style="gap:8px; flex-wrap:wrap; align-items:center">
+          <strong><code>{{ source.scope }}</code></strong>
+          <span class="badge">{{ source.posts }} posts seen</span>
+          {% if source.confirmed %}<span class="badge">confirmed {{ source.confirmed }}</span>{% endif %}
+        </div>
+        <div class="muted" style="margin-top:6px">Track this source so it is included in future searches for this disaster.</div>
+        <form method="post" action="/admin/discovery/source-seeds" style="margin-top:8px">
+          <input type="hidden" name="disaster_id" value="{{ selected.id }}"><input type="hidden" name="platform" value="facebook">
+          <input type="hidden" name="label" value="{{ source.scope }}"><input type="hidden" name="source" value="{{ source.scope }}">
+          <button class="secondary">Track this source</button>
+        </form>
+      </div>
+    {% else %}<p class="muted">No additional repeated sharers found yet.</p>{% endfor %}
+
+    <h3>Seeded priority sources</h3>
+    {% for item in priority_searches %}
+      <div class="card" style="margin:8px 0; padding:12px">
+        <div class="inline" style="gap:8px; flex-wrap:wrap; align-items:center">
+          <strong>{{ item.label }}</strong>
+          <span class="badge">{{ item.tier }}</span>
+        </div>
+        <div class="inline" style="gap:10px; flex-wrap:wrap; margin-top:8px">
+          <a class="button secondary" href="{{ item.url }}" target="_blank" rel="noopener noreferrer">Search posts</a>
+          {% if item.source_url %}<a class="button secondary" href="{{ item.source_url }}" target="_blank" rel="noopener noreferrer">Open source</a>{% endif %}
+        </div>
+      </div>
+    {% endfor %}
+  {% endif %}
+
+  <h3>Generated targeted searches</h3>
+  {% for query, url in queries %}<p><a href="{{ url }}" target="_blank" rel="noopener noreferrer">Search</a> · <code>{{ query }}</code></p>{% else %}<p>No queries.</p>{% endfor %}
+
+  {% if platform == 'facebook' %}
+  <h3>Wide query plan ({{ wide_query_plan|length }})</h3>
+  <div style="max-height:320px; overflow:auto">
+    {% for query in wide_query_plan %}<p><code>{{ query }}</code></p>{% else %}<p>No wide queries generated.</p>{% endfor %}
+  </div>
+  {% endif %}
+
+  <p><a href="/admin/ai-review?disaster_id={{ selected.id }}&platform={{ platform }}">Open manual Free AI Review fallback</a></p>
+</details>
+
+<h2>{% if view == 'review' %}To Review{% elif view == 'relevant' %}Relevant Findings{% elif view == 'irrelevant' %}Irrelevant Archive{% else %}Done Posts{% endif %}</h2>
+
+<div class="card" id="bulk-discovery-form">
+  <input type="hidden" name="disaster_id" value="{{ selected.id }}">
+  <input type="hidden" name="platform" value="{{ platform }}">
+  <input type="hidden" name="view" value="{{ view }}">
+  <input type="hidden" name="q" value="{{ q }}">
+  <div class="inline" style="gap:8px; flex-wrap:wrap; align-items:center; margin-bottom:12px">
+    <button type="button" class="secondary" id="select-all-candidates">Select all</button>
+    <form method="post" action="/admin/discovery/bulk-status" id="bulk-mark-relevant-form" style="display:inline">
+      <input type="hidden" name="disaster_id" value="{{ selected.id }}">
+      <input type="hidden" name="platform" value="{{ platform }}">
+      <input type="hidden" name="view" value="{{ view }}">
+      <input type="hidden" name="q" value="{{ q }}">
+      <input type="hidden" name="status_action" value="relevant">
+      <button type="submit">Mark selected Relevant</button>
+    </form>
+    <form method="post" action="/admin/discovery/bulk-status" id="bulk-mark-irrelevant-form" style="display:inline">
+      <input type="hidden" name="disaster_id" value="{{ selected.id }}">
+      <input type="hidden" name="platform" value="{{ platform }}">
+      <input type="hidden" name="view" value="{{ view }}">
+      <input type="hidden" name="q" value="{{ q }}">
+      <input type="hidden" name="status_action" value="irrelevant">
+      <button type="submit" class="secondary">Mark selected Irrelevant</button>
+    </form>
+    <span class="muted" id="selected-candidate-count">0 selected</span>
+  </div>
+
+<table>
+  <thead><tr><th style="width:34px"></th><th>Finding</th><th>Status</th><th>Actions</th></tr></thead>
+  <tbody>
+  {% for c in candidates %}
+    <tr id="candidate-{{ c.id }}">
+      <td><input class="candidate-checkbox" type="checkbox" name="candidate_ids" value="{{ c.id }}"></td>
+      <td>
+        <strong>{{ c.title or 'Untitled public result' }}</strong>
+        <div class="muted discovery-snippet">{{ c.snippet or 'No indexed text supplied.' }}</div>
+        <details class="discovery-snippet-expand">
+          <summary>Expand text</summary>
+          <pre class="wrap">{{ c.snippet or 'No indexed text supplied.' }}</pre>
+        </details>
+        <div style="margin-top:6px">
+          <a href="{{ c.url }}" target="_blank" rel="noopener noreferrer">Open source</a>
+        </div>
+      </td>
+      <td><span class="badge">{{ c.status }}</span></td>
+      <td>
+        <a class="button discovery-review-link" href="/admin/discovery/{{ c.id }}">Review</a>
+        {% if c.status in ['new', 'needs_ai'] %}
+          <form class="discovery-status-form" method="post" action="/admin/discovery/{{ c.id }}/status" style="display:inline">
+            <input type="hidden" name="status_action" value="relevant"><input type="hidden" name="platform" value="{{ platform }}"><input type="hidden" name="view" value="{{ view }}"><input type="hidden" name="q" value="{{ q }}">
+            <button>Relevant</button>
+          </form>
+          <form class="discovery-status-form" method="post" action="/admin/discovery/{{ c.id }}/status" style="display:inline">
+            <input type="hidden" name="status_action" value="irrelevant"><input type="hidden" name="platform" value="{{ platform }}"><input type="hidden" name="view" value="{{ view }}"><input type="hidden" name="q" value="{{ q }}">
+            <button class="secondary">Not relevant</button>
+          </form>
+        {% elif c.status == 'relevant' %}
+          <form class="discovery-status-form" method="post" action="/admin/discovery/{{ c.id }}/status" style="display:inline">
+            <input type="hidden" name="status_action" value="irrelevant"><input type="hidden" name="platform" value="{{ platform }}"><input type="hidden" name="view" value="{{ view }}"><input type="hidden" name="q" value="{{ q }}">
+            <button class="secondary">Not relevant</button>
+          </form>
+        {% elif c.status in ['irrelevant', 'rejected'] %}
+          <form class="discovery-status-form" method="post" action="/admin/discovery/{{ c.id }}/status" style="display:inline">
+            <input type="hidden" name="status_action" value="restore"><input type="hidden" name="platform" value="{{ platform }}"><input type="hidden" name="view" value="{{ view }}"><input type="hidden" name="q" value="{{ q }}">
+            <button>Restore to Review</button>
+          </form>
+        {% endif %}
+      </td>
+    </tr>
+  {% else %}
+    <tr><td colspan="4">No findings in this section.</td></tr>
+  {% endfor %}
+  </tbody>
+</table>
+</div>
+
+{% endif %}
+
+<script>
+(function () {
+  const scrollKey = `mp-discovery-scroll:${location.pathname}${location.search}`;
+  const saved = sessionStorage.getItem(scrollKey);
+  if (saved !== null) {
+    sessionStorage.removeItem(scrollKey);
+    const y = Number(saved);
+    if (Number.isFinite(y)) requestAnimationFrame(() => window.scrollTo(0, y));
+  }
+  function remember() { sessionStorage.setItem(scrollKey, String(window.scrollY)); }
+  document.querySelectorAll('.discovery-status-form').forEach((form) => form.addEventListener('submit', remember));
+  document.querySelectorAll('.discovery-review-link').forEach((link) => link.addEventListener('click', remember));
+
+  const bulkForm = document.getElementById('bulk-discovery-form');
+  const bulkRelevantForm = document.getElementById('bulk-mark-relevant-form');
+  const bulkIrrelevantForm = document.getElementById('bulk-mark-irrelevant-form');
+  const checkboxes = Array.from(document.querySelectorAll('.candidate-checkbox'));
+  const selectAll = document.getElementById('select-all-candidates');
+  const selectedCount = document.getElementById('selected-candidate-count');
+
+  function syncSelectionCount() {
+    const count = checkboxes.filter((box) => box.checked).length;
+    if (selectedCount) selectedCount.textContent = `${count} selected`;
+  }
+
+  function syncBulkForm(form) {
+    if (!form) return;
+    form.querySelectorAll('input[data-bulk-copy]').forEach((item) => item.remove());
+    checkboxes.filter((box) => box.checked).forEach((box) => {
+      const input = document.createElement('input');
+      input.type = 'hidden';
+      input.name = 'candidate_ids';
+      input.value = box.value;
+      input.setAttribute('data-bulk-copy', '1');
+      form.appendChild(input);
+    });
+  }
+
+  if (bulkForm) {
+    bulkForm.addEventListener('submit', remember);
+  }
+  if (bulkRelevantForm) {
+    bulkRelevantForm.addEventListener('submit', (event) => {
+      syncBulkForm(bulkRelevantForm);
+      remember();
+      if (!checkboxes.some((box) => box.checked)) {
+        event.preventDefault();
+      }
+    });
+  }
+  if (bulkIrrelevantForm) {
+    bulkIrrelevantForm.addEventListener('submit', (event) => {
+      syncBulkForm(bulkIrrelevantForm);
+      remember();
+      if (!checkboxes.some((box) => box.checked)) {
+        event.preventDefault();
+      }
+    });
+  }
+  checkboxes.forEach((box) => box.addEventListener('change', syncSelectionCount));
+  if (selectAll) {
+    selectAll.addEventListener('click', () => {
+      const shouldSelect = checkboxes.some((box) => !box.checked);
+      checkboxes.forEach((box) => { box.checked = shouldSelect; });
+      syncSelectionCount();
+    });
+  }
+  syncSelectionCount();
+})();
+</script>
+
 {% endblock %}

@@ -1,0 +1,477 @@
+{% extends "base.html" %}
+{% block content %}
+
+<h1>Public Social Discovery</h1>
+
+<p class="muted">
+  V0 searches public web indexes only. It never logs into Facebook or accesses
+  closed/private groups. Every result remains subject to admin review.
+</p>
+
+<form method="get" class="card inline">
+  <div>
+    <label>Event</label>
+    <select name="disaster_id">
+      {% for d in disasters %}
+      <option value="{{ d.id }}" {% if selected and selected.id == d.id %}selected{% endif %}>
+        {{ d.name }}
+      </option>
+      {% endfor %}
+    </select>
+  </div>
+
+  <div>
+    <label>Platform</label>
+    <select name="platform">
+      {% for p in ['facebook','web','instagram','tiktok','x','reddit'] %}
+      <option value="{{ p }}" {% if platform == p %}selected{% endif %}>{{ p }}</option>
+      {% endfor %}
+    </select>
+  </div>
+
+  <input type="hidden" name="view" value="{{ view }}">
+
+  <div>
+    <button>Load Discovery</button>
+  </div>
+</form>
+
+{% if selected %}
+
+{% if wide_error %}
+<div class="notice">
+  <strong>Wide Discovery could not run.</strong><br>
+  The configured Serper / Google Search provider is unavailable, rejected, or
+  has reached its quota.
+</div>
+{% endif %}
+
+{% if wide_stats %}
+<div class="notice">
+  <strong>Wide Discovery finished</strong><br>
+  Queries searched: {{ wide_stats.queries }}<br>
+  Raw search results: {{ wide_stats.raw }}<br>
+  New candidates sent to review: {{ wide_stats.added }}
+</div>
+{% endif %}
+
+<div class="card">
+  <h2>Findings queue</h2>
+  <p class="muted">
+    Relevant and irrelevant decisions are retained. Nothing is deleted, so an
+    administrator can restore a result later if it was classified incorrectly.
+  </p>
+
+  <div class="inline" style="gap:8px; flex-wrap:wrap">
+    <a href="{{ queue_links.review }}">To Review ({{ queue_counts.review }})</a>
+    <a href="{{ queue_links.relevant }}">Relevant ({{ queue_counts.relevant }})</a>
+    <a href="{{ queue_links.irrelevant }}">Irrelevant ({{ queue_counts.irrelevant }})</a>
+    <a href="{{ queue_links.processed }}">Processed ({{ queue_counts.processed }})</a>
+  </div>
+</div>
+
+<form method="get" class="card inline">
+  <input type="hidden" name="disaster_id" value="{{ selected.id }}">
+  <input type="hidden" name="platform" value="{{ platform }}">
+  <input type="hidden" name="view" value="{{ view }}">
+
+  <div style="min-width:320px; flex:1">
+    <label>Search findings by person name</label>
+    <input
+      name="q"
+      value="{{ q }}"
+      placeholder="Name in English or Nepali"
+      autocomplete="off"
+    >
+  </div>
+
+  <div>
+    <button>Search Findings</button>
+  </div>
+
+  {% if q %}
+  <div>
+    <a href="{{ clear_search_url }}">Clear search</a>
+  </div>
+  {% endif %}
+</form>
+
+<div class="grid">
+  <div class="card">
+    <h2>Automated Discovery</h2>
+    <p>Runs the bounded public-web discovery collector and person-level filters.</p>
+    <form method="post" action="/admin/discovery/run">
+      <input type="hidden" name="disaster_id" value="{{ selected.id }}">
+      <input type="hidden" name="platform" value="{{ platform }}">
+      <button>Run Discovery Bot</button>
+    </form>
+  </div>
+
+  {% if platform == 'facebook' %}
+  <div class="card">
+    <h2>Wide Discovery</h2>
+    <p>
+      Person-focused Facebook discovery using affected places, stronger
+      missing-person phrases, the event date window, and human-confirmed
+      productive sources.
+    </p>
+
+    <p>
+      <strong>Provider:</strong> {{ wide_provider_status.name }} —
+      {% if wide_provider_status.available %}
+        <span class="badge">READY</span>
+      {% else %}
+        <span class="badge">NOT CONFIGURED</span>
+      {% endif %}
+    </p>
+
+    <p class="muted">{{ wide_provider_status.detail }}</p>
+
+    {% if wide_provider_status.available %}
+    <form method="post" action="/admin/wide-discovery/run">
+      <input type="hidden" name="disaster_id" value="{{ selected.id }}">
+      <button>Run Wide Discovery</button>
+    </form>
+    {% else %}
+    <button disabled>Run Wide Discovery</button>
+    <p class="muted">Set SERPER_API_KEY in the server environment to enable it.</p>
+    {% endif %}
+
+    <p class="muted">
+      A run uses at most 40 search queries. Avoid repeating it unnecessarily.
+    </p>
+
+    <details style="margin-top:12px">
+      <summary>Show Wide Search Plan ({{ wide_query_plan|length }} queries)</summary>
+      <div style="max-height:420px; overflow:auto; margin-top:10px">
+        {% for query in wide_query_plan %}
+        <p><strong>{{ '%03d'|format(loop.index) }}.</strong> <code>{{ query }}</code></p>
+        {% else %}
+        <p>No wide queries generated.</p>
+        {% endfor %}
+      </div>
+    </details>
+  </div>
+  {% endif %}
+
+  <div class="card">
+    <h2>Free AI Review</h2>
+    <p>
+      Review collected candidates using a free interactive AI session. No AI
+      API call is made.
+    </p>
+    <form method="get" action="/admin/ai-review">
+      <input type="hidden" name="disaster_id" value="{{ selected.id }}">
+      <input type="hidden" name="platform" value="{{ platform }}">
+      <button>Prepare Free AI Review</button>
+    </form>
+  </div>
+
+  <div class="card" id="manual-intake">
+    <h2>Manual Finding Intake</h2>
+    <p class="muted">
+      Use this when a targeted search finds a public post that automated
+      discovery missed, or when you need to add fuller public text/context to
+      an existing candidate.
+    </p>
+    <form method="post" action="/admin/discovery/manual">
+      <input type="hidden" name="disaster_id" value="{{ selected.id }}">
+      <input type="hidden" name="platform" value="{{ platform }}">
+
+      <label>Search / source context</label>
+      <input
+        id="manual-search-query"
+        name="search_query"
+        placeholder="Optional: the targeted query or source that found this post"
+      >
+
+      <label>Public source URL *</label>
+      <input id="manual-source-url" type="url" name="url" required>
+
+      <label>Title</label>
+      <input name="title">
+
+      <label>Full public post text / additional context</label>
+      <textarea
+        name="snippet"
+        rows="8"
+        placeholder="Paste the public caption, poster text, contact details, names, or other useful context that the automated search result missed."
+      ></textarea>
+
+      <button>Add / Enrich Candidate</button>
+    </form>
+  </div>
+</div>
+
+{% if platform == 'facebook' and priority_searches %}
+<details style="margin-top:18px" open>
+  <summary>Priority missing-person sharers</summary>
+  <div class="card">
+    <p class="muted">
+      These are public sources currently observed sharing person-level
+      Rasuwa missing-person information. They are search seeds only. Every
+      post still requires person-level filtering and human review.
+    </p>
+
+    {% for item in priority_searches %}
+    <div style="padding:10px 0; border-bottom:1px solid #ddd">
+      <strong>{{ item.label }}</strong>
+      {% if item.tier == 'high' %}
+      <span class="badge">HIGH ACTIVITY</span>
+      {% endif %}
+      <br>
+
+      <a href="{{ item.url }}" target="_blank" rel="noopener noreferrer">
+        Search this source
+      </a>
+
+      {% if item.source_url %}
+      &nbsp; | &nbsp;
+      <a href="{{ item.source_url }}" target="_blank" rel="noopener noreferrer">
+        Open source page
+      </a>
+      {% endif %}
+
+      &nbsp;
+      <button
+        type="button"
+        class="manual-add-query"
+        data-query="{{ item.query|e }}"
+      >Manual Add</button>
+
+      <div style="margin-top:6px">
+        <code>{{ item.query }}</code>
+      </div>
+    </div>
+    {% endfor %}
+  </div>
+</details>
+{% endif %}
+
+<details style="margin-top:18px">
+  <summary>Targeted manual searches</summary>
+  <div class="card">
+    <p class="muted">
+      If a search result is useful but automation did not collect it, click
+      Manual Add. The intake form will remember which query found it.
+    </p>
+
+    {% for query, url in queries %}
+    <p>
+      <a href="{{ url }}" target="_blank" rel="noopener noreferrer">Search</a>
+      &nbsp;
+      <button
+        type="button"
+        class="manual-add-query"
+        data-query="{{ query|e }}"
+      >Manual Add</button>
+      <br>
+      <code>{{ query }}</code>
+    </p>
+    {% else %}
+    <p>No queries.</p>
+    {% endfor %}
+  </div>
+</details>
+
+<h2>
+  {% if view == 'review' %}To Review{% elif view == 'relevant' %}Relevant Findings{% elif view == 'irrelevant' %}Irrelevant Archive{% else %}Processed Findings{% endif %}
+</h2>
+
+<table>
+  <thead>
+    <tr>
+      <th>Platform</th>
+      <th>Candidate</th>
+      <th>Status</th>
+      <th>Review</th>
+      <th>Classification</th>
+    </tr>
+  </thead>
+  <tbody>
+    {% for c in candidates %}
+    <tr id="candidate-{{ c.id }}">
+      <td>{{ c.platform }}</td>
+      <td>
+        <a href="{{ c.url }}" target="_blank" rel="noopener noreferrer">
+          {{ c.title or c.url }}
+        </a>
+
+        <div
+          class="candidate-public-details"
+          data-candidate-id="{{ c.id }}"
+          style="margin-top:10px"
+        >
+          <div class="muted" style="white-space:pre-wrap">
+            <strong>Search/public text:</strong>
+            <span class="candidate-text">{{ c.snippet or 'No text supplied by search provider.' }}</span>
+          </div>
+          <div class="candidate-structured" style="margin-top:8px"></div>
+          {% if c.platform == 'facebook' %}
+          <div class="candidate-load-status muted" style="margin-top:6px">
+            Loading richer public post details when available…
+          </div>
+          {% endif %}
+        </div>
+      </td>
+      <td>{{ c.status }}</td>
+      <td><a class="discovery-review-link" href="/admin/discovery/{{ c.id }}">Review Details</a></td>
+      <td>
+        {% if c.status in ['new', 'needs_ai'] %}
+        <form class="discovery-status-form" method="post" action="/admin/discovery/{{ c.id }}/status" style="display:inline">
+          <input type="hidden" name="status_action" value="relevant">
+          <input type="hidden" name="platform" value="{{ platform }}">
+          <input type="hidden" name="view" value="{{ view }}">
+          <input type="hidden" name="q" value="{{ q }}">
+          <button>✓ Relevant</button>
+        </form>
+        <form class="discovery-status-form" method="post" action="/admin/discovery/{{ c.id }}/status" style="display:inline">
+          <input type="hidden" name="status_action" value="irrelevant">
+          <input type="hidden" name="platform" value="{{ platform }}">
+          <input type="hidden" name="view" value="{{ view }}">
+          <input type="hidden" name="q" value="{{ q }}">
+          <button class="secondary">Not relevant</button>
+        </form>
+        {% elif c.status == 'relevant' %}
+        <form class="discovery-status-form" method="post" action="/admin/discovery/{{ c.id }}/status" style="display:inline">
+          <input type="hidden" name="status_action" value="irrelevant">
+          <input type="hidden" name="platform" value="{{ platform }}">
+          <input type="hidden" name="view" value="{{ view }}">
+          <input type="hidden" name="q" value="{{ q }}">
+          <button class="secondary">Move to Irrelevant</button>
+        </form>
+        {% elif c.status in ['irrelevant', 'rejected'] %}
+        <form class="discovery-status-form" method="post" action="/admin/discovery/{{ c.id }}/status" style="display:inline">
+          <input type="hidden" name="status_action" value="restore">
+          <input type="hidden" name="platform" value="{{ platform }}">
+          <input type="hidden" name="view" value="{{ view }}">
+          <input type="hidden" name="q" value="{{ q }}">
+          <button>Restore to Review</button>
+        </form>
+        {% else %}
+        <span class="muted">Already processed</span>
+        {% endif %}
+      </td>
+    </tr>
+    {% else %}
+    <tr>
+      <td colspan="5">No findings in this section.</td>
+    </tr>
+    {% endfor %}
+  </tbody>
+</table>
+
+{% endif %}
+
+<script>
+(function () {
+  const blocks = Array.from(document.querySelectorAll('.candidate-public-details'));
+  const scrollKey = `mp-discovery-scroll:${location.pathname}${location.search}`;
+
+  const savedScroll = sessionStorage.getItem(scrollKey);
+  if (savedScroll !== null) {
+    sessionStorage.removeItem(scrollKey);
+    const y = Number(savedScroll);
+    if (Number.isFinite(y)) {
+      requestAnimationFrame(() => window.scrollTo(0, y));
+    }
+  }
+
+  function rememberDiscoveryPosition() {
+    sessionStorage.setItem(scrollKey, String(window.scrollY));
+  }
+
+  document.querySelectorAll('.discovery-status-form').forEach((form) => {
+    form.addEventListener('submit', rememberDiscoveryPosition);
+  });
+
+  document.querySelectorAll('.discovery-review-link').forEach((link) => {
+    link.addEventListener('click', rememberDiscoveryPosition);
+  });
+
+  document.querySelectorAll('.manual-add-query').forEach((button) => {
+    button.addEventListener('click', () => {
+      const queryInput = document.getElementById('manual-search-query');
+      const urlInput = document.getElementById('manual-source-url');
+      const intake = document.getElementById('manual-intake');
+
+      if (queryInput) {
+        queryInput.value = button.dataset.query || '';
+      }
+
+      if (intake) {
+        intake.scrollIntoView({behavior: 'smooth', block: 'start'});
+      }
+
+      if (urlInput) {
+        window.setTimeout(() => urlInput.focus(), 250);
+      }
+    });
+  });
+
+  async function loadDetails(block) {
+    if (block.dataset.loaded === '1') return;
+    block.dataset.loaded = '1';
+
+    const id = block.dataset.candidateId;
+    const status = block.querySelector('.candidate-load-status');
+    if (!status) return;
+
+    try {
+      const response = await fetch(`/admin/discovery/${id}/public-details`, {
+        credentials: 'same-origin'
+      });
+      if (!response.ok) throw new Error('details unavailable');
+      const data = await response.json();
+
+      const text = block.querySelector('.candidate-text');
+      if (data.text && text) text.textContent = data.text;
+
+      const structured = block.querySelector('.candidate-structured');
+      const parts = [];
+      if (data.multiple_people) {
+        parts.push('<strong>⚠ Multiple people may be reported in this post</strong>');
+      }
+      if (Array.isArray(data.people) && data.people.length) {
+        parts.push(`<strong>Possible person(s):</strong> ${data.people.map(escapeHtml).join(', ')}`);
+      }
+      if (data.age) parts.push(`<strong>Age:</strong> ${escapeHtml(String(data.age))}`);
+      if (data.last_seen_location) {
+        parts.push(`<strong>Last seen:</strong> ${escapeHtml(data.last_seen_location)}`);
+      }
+      if (data.public_contact_number) {
+        parts.push(`<strong>Public contact:</strong> ${escapeHtml(data.public_contact_number)}`);
+      }
+      structured.innerHTML = parts.join(' &nbsp; | &nbsp; ');
+
+      status.textContent = data.full_public_text_available
+        ? 'Fuller public post text loaded into this page.'
+        : 'Facebook did not expose fuller public text. Showing the best indexed text available.';
+    } catch (error) {
+      status.textContent = 'Could not load more public text. Showing the indexed search text.';
+    }
+  }
+
+  function escapeHtml(value) {
+    const div = document.createElement('div');
+    div.textContent = value == null ? '' : String(value);
+    return div.innerHTML;
+  }
+
+  if ('IntersectionObserver' in window) {
+    const observer = new IntersectionObserver((entries) => {
+      for (const entry of entries) {
+        if (entry.isIntersecting) {
+          loadDetails(entry.target);
+          observer.unobserve(entry.target);
+        }
+      }
+    }, {rootMargin: '250px'});
+    blocks.forEach((block) => observer.observe(block));
+  } else {
+    blocks.forEach(loadDetails);
+  }
+})();
+</script>
+
+{% endblock %}

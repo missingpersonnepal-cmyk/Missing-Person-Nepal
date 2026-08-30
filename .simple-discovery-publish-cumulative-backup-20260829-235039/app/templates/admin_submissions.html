@@ -1,0 +1,293 @@
+{% extends "base.html" %}
+{% block content %}
+
+<h1>Pending Submissions</h1>
+
+<p class="muted">
+  AI-extracted information is pre-filled here for human review.
+  Correct anything that is wrong, save the reviewed details,
+  then create or attach the Master record.
+</p>
+
+{% for s in submissions %}
+
+<div class="card">
+
+  <h2>
+    SUB-{{ '%06d'|format(s.id) }}
+    — {{ s.kind }}
+  </h2>
+
+  {% if s.photo_path %}
+  <div style="margin-bottom:16px">
+    <p>
+      <strong>Proposed source image</strong>
+    </p>
+
+    <img
+      src="/admin/media/{{ s.photo_path }}"
+      alt="Source image attached to missing-person report"
+      style="
+        max-width:320px;
+        max-height:320px;
+        object-fit:contain;
+        border-radius:8px;
+      "
+    >
+
+    <p class="muted">
+      Source evidence only.
+      Do not use the photograph itself as identity proof.
+    </p>
+  </div>
+  {% endif %}
+
+  {% if s.social_url %}
+  <p>
+    <a
+      href="{{ s.social_url }}"
+      target="_blank"
+      rel="noopener noreferrer"
+    >
+      Open original public source
+    </a>
+  </p>
+  {% endif %}
+
+  {% if s.notes %}
+  <details>
+    <summary>Source / AI review notes</summary>
+    <pre class="wrap">{{ s.notes }}</pre>
+  </details>
+  {% endif %}
+
+  <form
+    method="post"
+    action="/admin/submissions/{{ s.id }}/edit"
+    enctype="multipart/form-data"
+    style="margin-top:16px"
+  >
+
+    <h3>Review extracted information</h3>
+
+    <div class="inline">
+
+      <div>
+        <label>Name</label>
+        <input
+          name="name"
+          value="{{ s.name or '' }}"
+          {% if s.kind == 'missing_report' %}required{% endif %}
+        >
+      </div>
+
+      <div>
+        <label>Nepali name</label>
+        <input
+          name="name_ne"
+          value="{{ s.name_ne or '' }}"
+        >
+      </div>
+
+      <div>
+        <label>Age</label>
+        <input
+          type="number"
+          name="age"
+          value="{{ s.age or '' }}"
+        >
+      </div>
+
+    </div>
+
+    <div class="inline">
+
+      <div>
+        <label>Gender</label>
+        <select name="gender">
+          <option value="" {% if not s.gender %}selected{% endif %}>Unknown</option>
+          <option value="Male" {% if s.gender == 'Male' %}selected{% endif %}>Male</option>
+          <option value="Female" {% if s.gender == 'Female' %}selected{% endif %}>Female</option>
+        </select>
+      </div>
+
+      <div>
+        <label>Last-seen date</label>
+        <input
+          type="date"
+          name="last_seen_date"
+          value="{{ s.last_seen_date.isoformat() if s.last_seen_date else '' }}"
+        >
+      </div>
+
+      <div>
+        <label>Last-seen time</label>
+        <input
+          type="time"
+          name="last_seen_time"
+          value="{{ s.last_seen_time.strftime('%H:%M') if s.last_seen_time else '' }}"
+        >
+      </div>
+
+    </div>
+
+    <label>Last-seen / affected location</label>
+    <input
+      name="last_seen_location"
+      value="{{ s.last_seen_location or '' }}"
+    >
+
+    <label>Clothing</label>
+    <textarea
+      name="clothing"
+    >{{ s.clothing or '' }}</textarea>
+
+    <label>Identification details</label>
+    <textarea
+      name="identification_details"
+    >{{ s.identification_details or '' }}</textarea>
+
+    <label>Public information contact</label>
+    <input
+      name="public_contact_number"
+      value="{{ s.public_contact_number or '' }}"
+    >
+
+    <label>
+      Replace / add source image
+    </label>
+
+    <input
+      type="file"
+      name="photo"
+      accept="image/jpeg,image/png,image/webp"
+    >
+
+    <p class="muted">
+      If the AI could not retrieve the public post image,
+      an administrator may upload the source image here.
+    </p>
+
+    <button>
+      Save Reviewed Details
+    </button>
+
+  </form>
+
+
+  {% if s.kind == 'missing_report' %}
+
+  <p>
+    <strong>Affected-area match:</strong>
+
+    {% if location_match_map.get(s.id) %}
+    <span class="badge">YES</span>
+    {% else %}
+    <span class="badge">NO / REVIEW</span>
+    {% endif %}
+  </p>
+
+  {% endif %}
+
+
+  {% if duplicate_map.get(s.id) %}
+
+  <div class="notice">
+
+    <strong>
+      Possible duplicates
+    </strong>
+
+    {% for p, score in duplicate_map[s.id] %}
+
+    <div>
+      {{ score }}%
+      — {{ p.case_number }}
+      — {{ p.name }}
+      — {{ p.last_seen_location }}
+    </div>
+
+    {% endfor %}
+
+  </div>
+
+  {% endif %}
+
+
+  {% if s.kind == 'missing_report' %}
+
+  <form
+    method="post"
+    action="/admin/submissions/{{ s.id }}/approve-new"
+    style="display:inline"
+  >
+    <button>
+      Approve & Create New Master
+    </button>
+  </form>
+
+  {% endif %}
+
+
+  <form
+    method="post"
+    action="/admin/submissions/{{ s.id }}/attach"
+    class="inline"
+    style="margin-top:8px"
+  >
+
+    <div>
+      <select
+        name="person_id"
+        required
+      >
+
+        <option value="">
+          Attach to existing Master...
+        </option>
+
+        {% for p in people_by_disaster.get(s.disaster_id, []) %}
+
+        <option value="{{ p.id }}">
+          {{ p.case_number }}
+          — {{ p.name }}
+        </option>
+
+        {% endfor %}
+
+      </select>
+    </div>
+
+    <div>
+      <button class="secondary">
+        Approve & Attach
+      </button>
+    </div>
+
+  </form>
+
+
+  <form
+    method="post"
+    action="/admin/submissions/{{ s.id }}/reject"
+    style="
+      display:inline;
+      margin-top:8px;
+    "
+  >
+    <button class="danger">
+      Reject
+    </button>
+  </form>
+
+</div>
+
+{% else %}
+
+<div class="card">
+  No pending submissions.
+</div>
+
+{% endfor %}
+
+{% endblock %}

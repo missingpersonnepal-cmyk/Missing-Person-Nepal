@@ -1,6 +1,55 @@
 {% extends "base.html" %}
 {% block content %}
-<h1>Master Missing-Person Records</h1>
-<form method="get" class="card inline"><div><label>Search</label><input name="q" value="{{ q }}"></div><div><label>Event</label><select name="disaster_id"><option value="">All</option>{% for d in disasters %}<option value="{{ d.id }}" {% if selected_disaster == d.id %}selected{% endif %}>{{ d.name }}</option>{% endfor %}</select></div><div><button>Filter</button></div></form>
-<table><thead><tr><th>Case</th><th>Name</th><th>Last seen</th><th>Sources</th><th>Published</th><th></th></tr></thead><tbody>{% for p in people %}<tr><td>{{ p.case_number }}</td><td>{{ p.name }}{% if p.name_ne %}<br>{{ p.name_ne }}{% endif %}</td><td>{{ p.last_seen_location }}</td><td>{{ p.sources|length }}</td><td>{{ 'Yes' if p.published else 'No' }}{% if p.archived %} / Archived{% endif %}</td><td><a href="/admin/people/{{ p.id }}">Open</a></td></tr>{% else %}<tr><td colspan="6">No records.</td></tr>{% endfor %}</tbody></table>
+<h1>Missing-Person Case Records</h1>
+
+<div class="card">
+  <div class="inline" style="gap:12px">
+    <a href="/admin/people?case_status=missing{% if selected_disaster %}&disaster_id={{ selected_disaster }}{% endif %}">Missing ({{ status_counts.missing }})</a>
+    <a href="/admin/people?case_status=found{% if selected_disaster %}&disaster_id={{ selected_disaster }}{% endif %}">Found Alive ({{ status_counts.found }})</a>
+    <a href="/admin/people?case_status=identified{% if selected_disaster %}&disaster_id={{ selected_disaster }}{% endif %}">Identified / Deceased ({{ status_counts.identified }})</a>
+    <a href="/admin/people?case_status=all{% if selected_disaster %}&disaster_id={{ selected_disaster }}{% endif %}">All ({{ status_counts.all }})</a>
+  </div>
+</div>
+
+<form method="get" class="card inline">
+  <input type="hidden" name="case_status" value="{{ case_status }}">
+  <div><label>Search</label><input name="q" value="{{ q }}"></div>
+  <div><label>Event</label><select name="disaster_id"><option value="">All</option>{% for d in disasters %}<option value="{{ d.id }}" {% if selected_disaster == d.id %}selected{% endif %}>{{ d.name }}</option>{% endfor %}</select></div>
+  <div><button>Filter</button></div>
+</form>
+
+<table>
+  <thead><tr><th>Case</th><th>Name</th><th>Status</th><th>Last seen</th><th>Sources</th><th>Published</th><th>Actions</th></tr></thead>
+  <tbody>
+  {% for p in people %}
+  {% set status = status_map.get(p.id, 'missing') %}
+  <tr>
+    <td>{{ p.case_number }}</td>
+    <td>{{ p.name }}{% if p.name_ne %}<br>{{ p.name_ne }}{% endif %}</td>
+    <td>
+      {% if status == 'found' %}<span class="badge">FOUND ALIVE</span>
+      {% elif status == 'identified' %}<span class="badge">IDENTIFIED / DECEASED</span>
+      {% else %}<span class="badge">MISSING</span>{% endif %}
+    </td>
+    <td>{{ p.last_seen_location }}</td>
+    <td>{{ p.sources|length }}</td>
+    <td>{{ 'Yes' if p.published else 'No' }}{% if p.archived %} / Archived{% endif %}</td>
+    <td>
+      <a class="button secondary" href="/admin/people/{{ p.id }}">Edit</a>
+      {% if status == 'missing' %}
+        <form method="post" action="/admin/people/{{ p.id }}/publish" style="display:inline">
+          <button{% if p.published %} class="secondary"{% endif %}>{{ 'Unpublish' if p.published else 'Publish' }}</button>
+        </form>
+        <form method="post" action="/admin/people/{{ p.id }}/status" style="display:inline"><input type="hidden" name="case_status" value="found"><button>Found</button></form>
+        <form method="post" action="/admin/people/{{ p.id }}/status" style="display:inline"><input type="hidden" name="case_status" value="identified"><button class="danger">Identified</button></form>
+      {% else %}
+        <form method="post" action="/admin/people/{{ p.id }}/status" style="display:inline"><input type="hidden" name="case_status" value="missing"><button>Mark Missing Again</button></form>
+      {% endif %}
+    </td>
+  </tr>
+  {% else %}
+  <tr><td colspan="7">No records in this status filter.</td></tr>
+  {% endfor %}
+  </tbody>
+</table>
 {% endblock %}

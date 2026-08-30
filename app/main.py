@@ -5,7 +5,8 @@ from pathlib import Path
 
 from fastapi import FastAPI
 from fastapi.staticfiles import StaticFiles
-from sqlalchemy import select
+from sqlalchemy import select, text
+from sqlalchemy.exc import SQLAlchemyError
 from starlette.middleware.sessions import SessionMiddleware
 
 from .api import router as api_router
@@ -29,6 +30,15 @@ def seed_admin() -> None:
             db.commit()
 
 
+def check_database_ready() -> tuple[bool, str | None]:
+    try:
+        with SessionLocal() as db:
+            db.execute(text("select 1"))
+        return True, None
+    except SQLAlchemyError as exc:
+        return False, str(exc.__cause__ or exc)
+
+
 @asynccontextmanager
 async def lifespan(_: FastAPI):
     if settings.auto_create_tables:
@@ -48,3 +58,11 @@ app.include_router(admin_router)
 @app.get("/health")
 def health() -> dict[str, str]:
     return {"status": "ok"}
+
+
+@app.get("/ready")
+def ready() -> dict[str, str]:
+    db_ok, error = check_database_ready()
+    if not db_ok:
+        return {"status": "degraded", "database": "down", "error": error or "unknown"}
+    return {"status": "ok", "database": "up"}

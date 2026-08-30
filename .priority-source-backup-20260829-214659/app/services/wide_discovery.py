@@ -1,0 +1,336 @@
+from __future__ import annotations
+
+import time
+from datetime import timedelta
+from typing import Protocol
+from urllib.parse import urlparse
+
+import httpx
+from sqlalchemy import select
+from sqlalchemy.orm import Session
+
+from ..models import Disaster, DiscoveryCandidate
+from .discovery import SearchResult, is_person_specific_candidate
+from .normalization import canonicalize_url
+from .search_providers import SerperPublicSearch
+
+
+class SearchProvider(Protocol):
+    def search(
+        self,
+        query: str,
+        max_results: int = 15,
+    ) -> list[SearchResult]:
+        ...
+
+
+WIDE_MAX_QUERIES = 40
+WIDE_RESULTS_PER_QUERY = 15
+WIDE_REQUEST_DELAY_SECONDS = 0.40
+
+
+PRECISION_TERMS = [
+    "out of contact",
+    "last seen",
+    "has been missing",
+    "person missing",
+    "cannot be contacted",
+    "सम्पर्कविहीन",
+    "सम्पर्क विहीन",
+    "बेपत्ता",
+    "खोजिदिनुहोला",
+    "हराएको व्यक्ति",
+]
+
+LIST_TERMS = [
+    "missing persons list",
+    "missing people names",
+    "named missing people",
+    "missing family",
+    "बेपत्ता नामावली",
+    "सम्पर्कविहीन नाम",
+    "हराएका व्यक्तिको सूची",
+]
+
+SOURCE_TERMS = [
+    "out of contact",
+    "last seen",
+    "person missing",
+    "सम्पर्कविहीन",
+    "बेपत्ता",
+    "खोजिदिनुहोला",
+]
+
+
+def is_facebook_post_url(url: str) -> bool:
+    try:
+        parsed = urlparse(url)
+    except ValueError:
+        return False
+
+    host = (parsed.hostname or "").casefold()
+    if not (host == "facebook.com" or host.endswith(".facebook.com")):
+        return False
+
+    path = parsed.path.casefold()
+    return (
+        "/posts/" in path
+        or "/groups/" in path and "/posts/" in path
+        or "permalink.php" in path
+        or "story.php" in path
+        or "/photos/" in path
+        or "/photo/" in path
+        or "/reel/" in path
+        or "/reels/" in path
+        or "/share/p/" in path
+        or "/share/v/" in path
+    )
+
+
+def facebook_source_scope(url: str) -> str | None:
+    try:
+        parsed = urlparse(url)
+    except ValueError:
+        return None
+
+    host = (parsed.hostname or "").casefold()
+    if not (host == "facebook.com" or host.endswith(".facebook.com")):
+        return None
+
+    parts = [part for part in parsed.path.split("/") if part]
+    if not parts:
+        return None
+
+    if parts[0].casefold() == "groups" and len(parts) >= 2:
+        return f"groups/{parts[1]}"
+
+    blocked = {
+        "watch", "reel", "reels", "photo", "photos", "share",
+        "story.php", "permalink.php",
+    }
+    if parts[0].casefold() in blocked:
+        return None
+
+    return parts[0]
+
+
+def _unique(items: list[str]) -> list[str]:
+    output: list[str] = []
+    seen: set[str] = set()
+    for item in items:
+        normalized = " ".join(item.split())
+        if not normalized or normalized in seen:
+            continue
+        seen.add(normalized)
+        output.append(normalized)
+    return output
+
+
+def _round_robin(groups: list[list[str]], max_queries: int) -> list[str]:
+    indexes = [0 for _ in groups]
+    output: list[str] = []
+    seen: set[str] = set()
+
+    while len(output) < max_queries:
+        added = False
+        for group_index, group in enumerate(groups):
+            while indexes[group_index] < len(group):
+                query = group[indexes[group_index]]
+                indexes[group_index] += 1
+                if query in seen:
+                    continue
+                seen.add(query)
+                output.append(query)
+                added = True
+                break
+            if len(output) >= max_queries:
+                break
+        if not added:
+            break
+
+    return output
+
+
+def generate_wide_queries(
+    disaster: Disaster,
+    source_scopes: list[str] | None = None,
+    max_queries: int = WIDE_MAX_QUERIES,
+) -> list[str]:
+    """Generate a bounded, person-focused Facebook search plan.
+
+    Broad standalone ``missing`` searches are intentionally excluded. Every
+    query is constrained to Facebook, an event/location, a stronger
+    missing-person phrase, and the disaster time window.
+    """
+    locations = disaster.locations()
+    search_places = _unique([disaster.name, *locations])
+    event_root = (
+        disaster.name.replace("Flood", "").replace("flood", "").strip()
+        or disaster.name
+    )
+    after = (disaster.start_date - timedelta(days=1)).isoformat()
+    date_filter = f"after:{after}"
+
+    location_queries: list[str] = []
+    for place in search_places:
+        for term in PRECISION_TERMS:
+            location_queries.append(
+                f'site:facebook.com "{place}" "{term}" {date_filter}'
+            )
+
+    list_queries: list[str] = []
+    for term in LIST_TERMS:
+        list_queries.append(
+            f'site:facebook.com "{event_root}" "{term}" {date_filter}'
+        )
+
+    source_queries: list[str] = []
+    # Human-confirmed productive sources get a reserved slice of the budget.
+    for scope in source_scopes or []:
+        for term in SOURCE_TERMS:
+            source_queries.append(
+                f'site:facebook.com/{scope} "{event_root}" "{term}" {date_filter}'
+            )
+        for place in locations[:4]:
+            for term in ("out of contact", "सम्पर्कविहीन", "बेपत्ता"):
+                source_queries.append(
+                    f'site:facebook.com/{scope} "{place}" "{term}" {date_filter}'
+                )
+
+    location_queries = _unique(location_queries)
+    list_queries = _unique(list_queries)
+    source_queries = _unique(source_queries)
+
+    # Location results dominate, while confirmed sources and named lists are
+    # guaranteed space. The hard cap is never exceeded.
+    return _round_robin(
+        [location_queries, source_queries, location_queries, list_queries],
+        max_queries,
+    )
+
+
+def collect_known_source_scopes(
+    db: Session,
+    disaster_id: int,
+    limit: int = 30,
+) -> list[str]:
+    """Return only sources promoted by human/processed relevance.
+
+    Irrelevant and unreviewed candidates must not teach the discovery engine
+    that a noisy page is productive.
+    """
+    urls = list(
+        db.scalars(
+            select(DiscoveryCandidate.url)
+            .where(
+                DiscoveryCandidate.disaster_id == disaster_id,
+                DiscoveryCandidate.status.in_(["relevant", "reviewed"]),
+            )
+            .order_by(DiscoveryCandidate.found_at.desc())
+            .limit(500)
+        ).all()
+    )
+
+    scopes: list[str] = []
+    for url in urls:
+        scope = facebook_source_scope(url)
+        if scope and scope not in scopes:
+            scopes.append(scope)
+        if len(scopes) >= limit:
+            break
+    return scopes
+
+
+def _is_source_scoped_query(query: str) -> bool:
+    prefix = "site:facebook.com/"
+    return query.casefold().startswith(prefix) and not query.casefold().startswith(
+        "site:facebook.com \"")
+
+
+def run_wide_discovery(
+    db: Session,
+    disaster: Disaster,
+    provider: SearchProvider | None = None,
+    max_queries: int = WIDE_MAX_QUERIES,
+    request_delay_seconds: float = WIDE_REQUEST_DELAY_SECONDS,
+) -> dict[str, int]:
+    provider = provider or SerperPublicSearch()
+
+    scopes = collect_known_source_scopes(db, disaster.id)
+    queries = generate_wide_queries(
+        disaster,
+        source_scopes=scopes,
+        max_queries=max_queries,
+    )
+
+    searched = 0
+    raw_results = 0
+    accepted_for_ai = 0
+    seen_urls: set[str] = set()
+
+    for index, query in enumerate(queries):
+        searched += 1
+        try:
+            results = provider.search(
+                query,
+                max_results=WIDE_RESULTS_PER_QUERY,
+            )
+        except httpx.HTTPError:
+            continue
+
+        for result in results:
+            raw_results += 1
+            url = canonicalize_url(result.url)
+            if not url or url in seen_urls:
+                continue
+            seen_urls.add(url)
+
+            if not is_facebook_post_url(url):
+                continue
+
+            normalized_result = SearchResult(
+                url=url,
+                title=result.title,
+                snippet=result.snippet,
+            )
+
+            # Normal searches require explicit event context in the indexed
+            # text. Human-confirmed source sweeps may omit it, but still need
+            # strong person-level evidence.
+            if not is_person_specific_candidate(
+                normalized_result,
+                disaster,
+                require_event_context=not _is_source_scoped_query(query),
+            ):
+                continue
+
+            existing = db.scalar(
+                select(DiscoveryCandidate.id).where(
+                    DiscoveryCandidate.disaster_id == disaster.id,
+                    DiscoveryCandidate.url == url,
+                )
+            )
+            if existing:
+                continue
+
+            db.add(
+                DiscoveryCandidate(
+                    disaster_id=disaster.id,
+                    platform="facebook",
+                    query="wide:" + query,
+                    url=url,
+                    title=result.title,
+                    snippet=result.snippet,
+                    status="needs_ai",
+                )
+            )
+            accepted_for_ai += 1
+
+        if request_delay_seconds > 0 and index < len(queries) - 1:
+            time.sleep(request_delay_seconds)
+
+    return {
+        "queries": searched,
+        "raw_results": raw_results,
+        "needs_ai": accepted_for_ai,
+    }

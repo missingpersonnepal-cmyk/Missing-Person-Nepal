@@ -1,6 +1,755 @@
 {% extends "base.html" %}
 {% block content %}
+
 <h1>Review Discovery Candidate</h1>
-<div class="card"><p><span class="badge">{{ candidate.platform }}</span> <a href="{{ candidate.url }}" target="_blank">Open original result</a></p><h2>{{ candidate.title or 'Untitled result' }}</h2><pre class="wrap">{{ candidate.snippet or '' }}</pre><p class="muted">Search query: {{ candidate.query }}</p></div>
-<form method="post" action="/admin/discovery/{{ candidate.id }}/submission" class="card"><h2>Extract missing-person details</h2><p>Enter only what is visible/credible from the public report. The result goes to the normal review queue. If one post lists several people, submit one person at a time from this same source; the original URL is retained for every linked case.</p><div class="inline"><div><label>Name *</label><input name="name" required></div><div><label>Nepali name</label><input name="name_ne"></div><div><label>Age</label><input type="number" name="age"></div></div><div class="inline"><div><label>Gender</label><input name="gender"></div><div><label>Last-seen date</label><input type="date" name="last_seen_date"></div></div><label>Last-seen / affected location *</label><input name="last_seen_location" required><label>Clothing</label><textarea name="clothing"></textarea><label>Identification details</label><textarea name="identification_details"></textarea><label>Public information contact</label><input name="public_contact_number"><button>Create pending submission</button></form>
+
+{% if created %}
+<div class="card" style="border:2px solid #2f855a">
+  <strong>Pending entry created.</strong>
+  This post remains in Relevant until you confirm that every missing person in the post has been handled.
+</div>
+{% endif %}
+
+{% if attached %}
+<div class="card" style="border:2px solid #2f855a">
+  <strong>Source attached to the existing person.</strong>
+  No duplicate missing-person entry was created.
+</div>
+{% endif %}
+
+<div class="card">
+  <p>
+    <span class="badge">{{ candidate.platform }}</span>
+    <span class="badge">{{ candidate.status }}</span>
+    <a href="{{ candidate.url }}" target="_blank" rel="noopener noreferrer">
+      Open original public post
+    </a>
+  </p>
+
+  <h2>{{ candidate.title or 'Untitled result' }}</h2>
+
+  <h3>Public post content available to the system</h3>
+  {% if source_post_text %}
+  <pre class="wrap">{{ source_post_text }}</pre>
+  <p class="muted">
+    Retrieved from public post metadata without logging in. Facebook may still withhold or truncate some content.
+  </p>
+  {% else %}
+  <pre class="wrap">{{ candidate.snippet or '' }}</pre>
+  <p class="muted">
+    Facebook did not expose fuller public text, so this is the best indexed text available to the system.
+  </p>
+  {% endif %}
+
+  {% if candidate.status in ['new', 'needs_ai'] %}
+  <div class="inline" style="margin-top:12px">
+    <form method="post" action="/admin/discovery/{{ candidate.id }}/status">
+      <input type="hidden" name="status_action" value="relevant">
+      <input type="hidden" name="platform" value="{{ candidate.platform }}">
+      <input type="hidden" name="view" value="review">
+      <button>✓ Mark Relevant</button>
+    </form>
+    <form method="post" action="/admin/discovery/{{ candidate.id }}/status">
+      <input type="hidden" name="status_action" value="irrelevant">
+      <input type="hidden" name="platform" value="{{ candidate.platform }}">
+      <input type="hidden" name="view" value="review">
+      <button class="secondary">Mark Irrelevant</button>
+    </form>
+  </div>
+  {% elif candidate.status in ['irrelevant', 'rejected'] %}
+  <form method="post" action="/admin/discovery/{{ candidate.id }}/status">
+    <input type="hidden" name="status_action" value="restore">
+    <input type="hidden" name="platform" value="{{ candidate.platform }}">
+    <input type="hidden" name="view" value="irrelevant">
+    <button>Restore to Review</button>
+  </form>
+  {% elif candidate.status == 'reviewed' %}
+  <form method="post" action="/admin/discovery/{{ candidate.id }}/status">
+    <input type="hidden" name="status_action" value="reopen">
+    <input type="hidden" name="platform" value="{{ candidate.platform }}">
+    <input type="hidden" name="view" value="processed">
+    <button>Reopen This Post</button>
+  </form>
+  {% endif %}
+</div>
+
+{% if candidate.status == 'relevant' %}
+<div class="card" id="chatgpt-prefill" style="border:2px solid #3182ce">
+  <h2>AI Prefill</h2>
+  {# Legacy workflow labels retained for regression compatibility: Create All Non-Duplicate People as Pending Entries; ChatGPT found multiple missing people in this post; Batch mode. #}
+
+  {% if openai_prefill_status.available %}
+  <p>
+    Press one button. The backend sends the reviewed public source evidence to the OpenAI API once, extracts <strong>all explicitly named missing people</strong>, and fills the form below automatically.
+  </p>
+  <p class="muted">
+    Model: <strong>{{ openai_prefill_status.model }}</strong>. The request uses the indexed snippet, public post text, OCR text, and the public source image when available. Image use is restricted to reading written text only; the AI is instructed never to identify or infer anything from a face or appearance.
+  </p>
+  <div class="inline">
+    <button type="button" id="run-openai-prefill">✨ AI Prefill All People</button>
+    <span id="openai-prefill-status" class="muted"></span>
+  </div>
+  {% else %}
+  <div class="notice">
+    <strong>Backend AI Prefill is not configured.</strong>
+    {{ openai_prefill_status.detail }}
+  </div>
+  {% endif %}
+
+  {% if batch_created or batch_published or batch_duplicates or batch_skipped %}
+  <div class="notice" style="margin-top:12px">
+    {% if batch_published %}<strong>{{ batch_published }}</strong> missing-person case(s) saved and published.{% endif %}
+    {% if batch_created %}<strong>{{ batch_created }}</strong> pending entry/entries created.{% endif %}
+    {% if batch_duplicates %}<strong>{{ batch_duplicates }}</strong> duplicate-name case(s) were left for individual review.{% endif %}
+    {% if batch_skipped %}<strong>{{ batch_skipped }}</strong> incomplete/already-entered record(s) were skipped.{% endif %}
+  </div>
+  {% endif %}
+
+  <div id="chatgpt-multiple-people" style="display:none; margin-top:14px">
+    <h3>People to save from this post</h3>
+    <p class="muted">
+      Review this list before saving. <strong>Load</strong> puts a person's details into the form. <strong>Remove</strong> deletes a wrong AI suggestion from this working list only. Use <strong>Add person</strong> if the source contains someone the AI missed. No extra AI call is made.
+    </p>
+    <div id="chatgpt-people-list"></div>
+    <div class="inline" style="margin-top:10px; gap:8px; flex-wrap:wrap">
+      <button type="button" id="chatgpt-add-blank">+ Add person</button>
+      <button type="button" id="chatgpt-add-another" class="secondary">Load next person</button>
+      <select id="chatgpt-person-picker" style="max-width:420px"></select>
+    </div>
+  </div>
+
+  <div id="chatgpt-source-notes" class="muted" style="display:none; margin-top:12px"></div>
+  <div id="openai-usage" class="muted" style="display:none; margin-top:6px"></div>
+
+  <form method="post" action="/admin/discovery/{{ candidate.id }}/chatgpt-prefill/batch" id="chatgpt-batch-form" style="margin-top:12px">
+    <input type="hidden" name="result_json" id="chatgpt-batch-json">
+    {% if source_post_text %}<textarea name="source_post_text" style="display:none">{{ source_post_text }}</textarea>{% endif %}
+    {% if ocr_text %}<textarea name="ocr_text" style="display:none">{{ ocr_text }}</textarea>{% endif %}
+    <div class="inline" style="gap:8px; flex-wrap:wrap">
+      <button type="submit" name="save_mode" value="publish" id="chatgpt-batch-button" disabled>Save & Publish Selected People</button>
+      <button type="submit" name="save_mode" value="pending" id="chatgpt-batch-pending-button" class="secondary" disabled>Save Selected as Pending</button>
+    </div>
+  </form>
+  <p class="muted">
+    Only people still visible in the list above are submitted. Exact existing/pending names are not auto-merged or duplicated; they remain for individual review.
+  </p>
+
+  <details style="margin-top:14px">
+    <summary>Manual ChatGPT fallback / troubleshooting</summary>
+    <p class="muted">
+      Use this only if the backend API is unavailable. Copy the prepared prompt into ChatGPT, then paste the JSON result. The automatic button above is the normal workflow.
+    </p>
+    <div class="inline">
+      <button type="button" id="copy-chatgpt-prefill">Copy ChatGPT Prefill Prompt</button>
+      <a href="https://chatgpt.com/" target="_blank" rel="noopener noreferrer">Open ChatGPT</a>
+    </div>
+    <span id="chatgpt-copy-status" class="muted"></span>
+    <details style="margin-top:12px">
+      <summary>Show prepared prompt</summary>
+      <textarea id="chatgpt-prefill-prompt" rows="18" readonly>{{ chatgpt_prefill_prompt }}</textarea>
+    </details>
+    <label style="margin-top:14px">Paste ChatGPT JSON result</label>
+    <textarea
+      id="chatgpt-prefill-json"
+      rows="10"
+      placeholder='{"people":[{"name":"...","age":null,"gender":null,"last_seen_date":null,"last_seen_time":null,"last_seen_location":"...","clothing":null,"identification_details":"...","public_contact_number":"..."}],"source_notes":null}'
+    ></textarea>
+    <button type="button" id="apply-chatgpt-prefill">Apply ChatGPT Prefill</button>
+    <span id="chatgpt-prefill-status" class="muted"></span>
+  </details>
+</div>
+{% endif %}
+
+{% if multiple_people_signal %}
+<div class="card" style="border:2px solid #b7791f">
+  <h2>⚠ Possible multiple missing people in this post</h2>
+  <p>
+    The public text indicates that this source may report more than one missing person.
+    {% if detected_people|length > 1 %}
+      The system found <strong>{{ detected_people|length }}</strong> explicit names.
+    {% endif %}
+    Treat these as review suggestions, not automatic identity decisions.
+  </p>
+  {% if candidate.status == 'relevant' and openai_prefill_status.available %}
+  <button type="button" id="multiple-add-another">+ Add another missing person from this post</button>
+  <p class="muted">If AI Prefill has not run yet, this button runs it once for the whole post and then loads the next extracted person into the form.</p>
+  {% endif %}
+  {% if detected_people %}
+  <ul>
+    {% for person_name in detected_people %}
+    <li>
+      {{ person_name }}
+      {% if person_name.casefold() in source_submission_names %}
+        <span class="badge">entry already created from this post</span>
+      {% endif %}
+    </li>
+    {% endfor %}
+  </ul>
+  {% else %}
+  <p class="muted">
+    The post uses plural/family wording, but the system could not safely separate every person's name.
+    Review the public text and source image for additional explicitly named people.
+  </p>
+  {% endif %}
+
+  {% if remaining_people %}
+  <p><strong>Still to review from this source:</strong> {{ remaining_people|join(', ') }}</p>
+  {% else %}
+  <p><strong>All detected names already have an entry from this source.</strong></p>
+  {% endif %}
+</div>
+{% endif %}
+
+{% if source_image_url %}
+<div class="card">
+  <h2>Picture found in public source</h2>
+  <img
+    src="{{ source_image_url }}"
+    alt="Image attached to the public missing-person post"
+    style="max-width:520px; max-height:520px; object-fit:contain; border-radius:8px"
+  >
+  <p class="muted">
+    Source evidence only. OCR may read written text from this image, but the system does not identify a person from their face or infer identity from appearance.
+  </p>
+</div>
+{% endif %}
+
+{% if ocr_text or ocr_detail %}
+<div class="card">
+  <h2>Text detected in source image</h2>
+  {% if ocr_detail %}<p class="muted">{{ ocr_detail }}</p>{% endif %}
+  {% if ocr_text %}
+  <pre class="wrap">{{ ocr_text }}</pre>
+  {% else %}
+  <p>No OCR text was detected.</p>
+  {% endif %}
+</div>
+{% endif %}
+
+<form method="post" action="/admin/discovery/{{ candidate.id }}/submission" class="card" id="person-entry-form">
+  <h2>Create or attach missing-person record</h2>
+  <p class="muted">
+    {% if candidate.status == 'relevant' %}
+      The values below begin with the local rule-based fallback. Use the AI Prefill card above for the recommended extraction, then review every field before creating anything.
+    {% else %}
+      Review every field. If the same name already exists, the system will warn you and let you attach this new source link instead of creating a duplicate person.
+    {% endif %}
+  </p>
+
+  {% if source_post_text %}
+  <textarea name="source_post_text" style="display:none">{{ source_post_text }}</textarea>
+  {% endif %}
+  {% if ocr_text %}
+  <textarea name="ocr_text" style="display:none">{{ ocr_text }}</textarea>
+  {% endif %}
+
+  {% if multiple_people_signal and remaining_people %}
+  <label>Choose a detected person from this post</label>
+  <select id="detected-person-picker">
+    <option value="">Select a name or type manually below</option>
+    {% for person_name in remaining_people %}
+    <option value="{{ person_name }}">{{ person_name }}</option>
+    {% endfor %}
+  </select>
+  <p class="muted">Selecting a name changes only the Name field. Re-check age, location, contact and all other details for that specific person.</p>
+  {% endif %}
+
+  <div class="inline">
+    <div>
+      <label>Name *</label>
+      <input id="person-name" name="name" value="{{ prefill.name or '' }}" required>
+    </div>
+    <div>
+      <label>Nepali name</label>
+      <input id="person-name-ne" name="name_ne" value="{{ prefill.name_ne or '' }}">
+    </div>
+    <div>
+      <label>Age</label>
+      <input id="person-age" type="number" name="age" value="{{ prefill.age or '' }}">
+    </div>
+  </div>
+
+  <div
+    id="duplicate-warning"
+    class="card"
+    style="{% if exact_duplicates or pending_duplicates %}display:block;{% else %}display:none;{% endif %} border:2px solid #c05621; margin-top:12px"
+  >
+    {% if exact_duplicates %}
+      <h3>⚠ Possible duplicate person</h3>
+      <p>
+        <strong>The same name already exists in this disaster.</strong>
+        If this is another public link for the same person, attach the source instead of creating a duplicate person.
+      </p>
+      {% for item in exact_duplicates %}
+      <label style="display:block; margin:8px 0">
+        <input type="radio" name="duplicate_action" value="attach:{{ item.id }}" required>
+        Attach this source to {{ item.case_number }} — {{ item.name }}
+        {% if item.last_seen_location %} — {{ item.last_seen_location }}{% endif %}
+      </label>
+      {% endfor %}
+      <label style="display:block; margin:8px 0">
+        <input type="radio" name="duplicate_action" value="continue" required>
+        This is a different person with the same name. Continue with a separate pending entry.
+      </label>
+    {% elif pending_duplicates %}
+      <h3>⚠ Pending duplicate-name warning</h3>
+      <p>
+        A pending submission already uses this name. Check Pending Submissions before making another record.
+      </p>
+      <ul>
+        {% for item in pending_duplicates %}
+        <li>Submission #{{ item.id }} — {{ item.name }}</li>
+        {% endfor %}
+      </ul>
+      <label style="display:block; margin:8px 0">
+        <input type="radio" name="duplicate_action" value="continue" required>
+        I reviewed the pending match and still want a separate pending entry.
+      </label>
+    {% endif %}
+  </div>
+
+  <div class="inline">
+    <div>
+      <label>Gender</label>
+      <select id="person-gender" name="gender">
+        <option value="" {% if not prefill.gender %}selected{% endif %}>Unknown</option>
+        <option value="Male" {% if prefill.gender == 'Male' %}selected{% endif %}>Male</option>
+        <option value="Female" {% if prefill.gender == 'Female' %}selected{% endif %}>Female</option>
+      </select>
+    </div>
+    <div>
+      <label>Last-seen date</label>
+      <input id="person-date" type="date" name="last_seen_date" value="{{ prefill.last_seen_date or '' }}">
+    </div>
+    <div>
+      <label>Last-seen time</label>
+      <input id="person-time" type="time" name="last_seen_time" value="{{ prefill.last_seen_time or '' }}">
+    </div>
+  </div>
+
+  <label>Last-seen / affected location *</label>
+  <input id="person-location" name="last_seen_location" value="{{ prefill.last_seen_location or '' }}" required>
+
+  <label>Clothing</label>
+  <textarea id="person-clothing" name="clothing">{{ prefill.clothing or '' }}</textarea>
+
+  <label>Identification / source details</label>
+  <textarea id="person-identification" name="identification_details" rows="10">{{ prefill.identification_details or '' }}</textarea>
+
+  <label>Public information contact</label>
+  <input id="person-phone" name="public_contact_number" value="{{ prefill.public_contact_number or '' }}">
+
+  {% if source_image_url %}
+  <input type="hidden" name="source_image_url" value="{{ source_image_url }}">
+  <p>
+    <label>
+      <input type="checkbox" name="include_source_image" value="1" checked>
+      Include this reviewed source image in the pending missing-person record
+    </label>
+  </p>
+  {% endif %}
+
+  {% if candidate.status not in ['irrelevant', 'rejected'] %}
+  <div class="inline" style="gap:8px; flex-wrap:wrap">
+    <button id="publish-entry-button" name="save_mode" value="publish">Save & Publish</button>
+    <button id="create-entry-button" name="save_mode" value="pending" class="secondary">Save as Pending</button>
+  </div>
+  {% else %}
+  <p class="muted">Restore this candidate to review before creating a submission.</p>
+  {% endif %}
+</form>
+
+{% if candidate.status not in ['irrelevant', 'rejected', 'reviewed'] %}
+<div class="card">
+  <h2>Finished reviewing this post?</h2>
+  <p>
+    Only mark the post processed after every missing person mentioned in it has either been entered, attached to an existing person, or intentionally skipped after review.
+  </p>
+  <form method="post" action="/admin/discovery/{{ candidate.id }}/status">
+    <input type="hidden" name="status_action" value="processed">
+    <input type="hidden" name="platform" value="{{ candidate.platform }}">
+    <input type="hidden" name="view" value="relevant">
+    <button>✓ Mark Whole Post Processed</button>
+  </form>
+</div>
+{% endif %}
+
+<p class="muted">
+  The system reads only public text and written text detected in source images. It does not use facial recognition or infer identity from appearance.
+</p>
+
+<script>
+(function () {
+  const candidateId = {{ candidate.id }};
+  const cacheKey = `missing-person-ai-prefill-${candidateId}`;
+  const alreadyEnteredNames = new Set({{ source_submission_names|list|tojson }});
+
+  const fields = {
+    name: document.getElementById('person-name'),
+    name_ne: document.getElementById('person-name-ne'),
+    age: document.getElementById('person-age'),
+    gender: document.getElementById('person-gender'),
+    last_seen_date: document.getElementById('person-date'),
+    last_seen_time: document.getElementById('person-time'),
+    last_seen_location: document.getElementById('person-location'),
+    clothing: document.getElementById('person-clothing'),
+    identification_details: document.getElementById('person-identification'),
+    public_contact_number: document.getElementById('person-phone')
+  };
+
+  const warning = document.getElementById('duplicate-warning');
+  const detectedPicker = document.getElementById('detected-person-picker');
+  const apiRun = document.getElementById('run-openai-prefill');
+  const apiStatus = document.getElementById('openai-prefill-status');
+  const apiUsage = document.getElementById('openai-usage');
+  const multipleAddAnother = document.getElementById('multiple-add-another');
+  const aiAddAnother = document.getElementById('chatgpt-add-another');
+  const aiAddBlank = document.getElementById('chatgpt-add-blank');
+  const aiPrompt = document.getElementById('chatgpt-prefill-prompt');
+  const aiJson = document.getElementById('chatgpt-prefill-json');
+  const aiApply = document.getElementById('apply-chatgpt-prefill');
+  const aiStatus = document.getElementById('chatgpt-prefill-status');
+  const aiCopy = document.getElementById('copy-chatgpt-prefill');
+  const aiCopyStatus = document.getElementById('chatgpt-copy-status');
+  const aiPeopleBox = document.getElementById('chatgpt-multiple-people');
+  const aiPeopleList = document.getElementById('chatgpt-people-list');
+  const aiPeoplePicker = document.getElementById('chatgpt-person-picker');
+  const aiSourceNotes = document.getElementById('chatgpt-source-notes');
+  const aiBatchForm = document.getElementById('chatgpt-batch-form');
+  const aiBatchJson = document.getElementById('chatgpt-batch-json');
+  const aiBatchButton = document.getElementById('chatgpt-batch-button');
+  const aiBatchPendingButton = document.getElementById('chatgpt-batch-pending-button');
+
+  let aiPayload = null;
+  let aiPeople = [];
+  let activeAiIndex = 0;
+  let timer = null;
+
+  function folded(value) {
+    return String(value || '').trim().toLocaleLowerCase();
+  }
+
+  function escapeHtml(value) {
+    const div = document.createElement('div');
+    div.textContent = value == null ? '' : String(value);
+    return div.innerHTML;
+  }
+
+  function setField(element, value) {
+    if (element) element.value = value == null ? '' : String(value);
+  }
+
+  function blankPerson() {
+    return {
+      name: '', name_ne: null, age: null, gender: null,
+      last_seen_date: null, last_seen_time: null, last_seen_location: null,
+      clothing: null, identification_details: null, public_contact_number: null,
+      missing_status_evidence: null
+    };
+  }
+
+  function payloadForBatch() {
+    if (!aiPeople.length) return '';
+    return JSON.stringify({
+      people: aiPeople,
+      source_notes: aiPayload && aiPayload.source_notes ? aiPayload.source_notes : null
+    });
+  }
+
+  function saveWorkingPayload() {
+    try {
+      sessionStorage.setItem(cacheKey, JSON.stringify({
+        ...(aiPayload || {}),
+        people: aiPeople
+      }));
+    } catch (error) {
+      // Browser storage is only a convenience.
+    }
+  }
+
+  function syncBatchPayload() {
+    const raw = payloadForBatch();
+    if (aiBatchJson) aiBatchJson.value = raw;
+    const enabled = aiPeople.some((person) => folded(person && person.name));
+    if (aiBatchButton) aiBatchButton.disabled = !enabled;
+    if (aiBatchPendingButton) aiBatchPendingButton.disabled = !enabled;
+    saveWorkingPayload();
+  }
+
+  function syncActivePersonFromForm() {
+    if (!aiPeople[activeAiIndex]) return;
+    Object.entries(fields).forEach(([key, element]) => {
+      if (!element) return;
+      let value = element.value == null ? '' : String(element.value).trim();
+      if (key === 'age') value = value ? Number(value) : null;
+      else value = value || null;
+      aiPeople[activeAiIndex][key] = value;
+    });
+    syncBatchPayload();
+  }
+
+  function applyAiPerson(person, index) {
+    if (!person || typeof person !== 'object') return;
+    activeAiIndex = Number.isInteger(index) ? index : 0;
+    Object.entries(fields).forEach(([key, element]) => {
+      let value = person[key];
+      if (key === 'gender' && !['Male', 'Female'].includes(value)) value = '';
+      setField(element, value);
+    });
+    if (aiPeoplePicker) aiPeoplePicker.value = String(activeAiIndex);
+    scheduleCheck();
+    const entryForm = document.getElementById('person-entry-form');
+    if (entryForm) entryForm.scrollIntoView({behavior: 'smooth', block: 'start'});
+  }
+
+  function renderWorkingPeople() {
+    if (!aiPeople.length) {
+      if (aiPeopleBox) aiPeopleBox.style.display = 'none';
+      syncBatchPayload();
+      return;
+    }
+
+    if (aiPeopleBox) aiPeopleBox.style.display = 'block';
+
+    if (aiPeoplePicker) {
+      aiPeoplePicker.innerHTML = '';
+      aiPeople.forEach((person, index) => {
+        const option = document.createElement('option');
+        option.value = String(index);
+        const name = folded(person && person.name) ? person.name : `New person ${index + 1}`;
+        const age = person && person.age != null ? `, age ${person.age}` : '';
+        const done = alreadyEnteredNames.has(folded(name)) ? ' ✓ already entered' : '';
+        option.textContent = `${index + 1}. ${name}${age}${done}`;
+        aiPeoplePicker.appendChild(option);
+      });
+      aiPeoplePicker.value = String(Math.min(activeAiIndex, aiPeople.length - 1));
+    }
+
+    if (aiPeopleList) {
+      aiPeopleList.innerHTML = '';
+      aiPeople.forEach((person, index) => {
+        const name = folded(person && person.name) ? person.name : `New person ${index + 1}`;
+        const entered = alreadyEnteredNames.has(folded(name));
+        const row = document.createElement('div');
+        row.style.cssText = 'display:flex; gap:8px; align-items:center; flex-wrap:wrap; padding:8px 0; border-bottom:1px solid #ddd';
+        row.innerHTML = `
+          <strong style="min-width:180px">${escapeHtml(name)}</strong>
+          ${entered ? '<span class="badge">already entered</span>' : ''}
+          <button type="button" data-ai-load="${index}">Load</button>
+          <button type="button" class="secondary" data-ai-remove="${index}">Remove</button>
+        `;
+        aiPeopleList.appendChild(row);
+      });
+      aiPeopleList.querySelectorAll('[data-ai-load]').forEach((button) => {
+        button.addEventListener('click', () => {
+          const index = Number(button.getAttribute('data-ai-load'));
+          if (Number.isInteger(index) && aiPeople[index]) applyAiPerson(aiPeople[index], index);
+        });
+      });
+      aiPeopleList.querySelectorAll('[data-ai-remove]').forEach((button) => {
+        button.addEventListener('click', () => {
+          const index = Number(button.getAttribute('data-ai-remove'));
+          if (!Number.isInteger(index) || !aiPeople[index]) return;
+          aiPeople.splice(index, 1);
+          activeAiIndex = Math.max(0, Math.min(activeAiIndex, aiPeople.length - 1));
+          renderWorkingPeople();
+          if (aiPeople[activeAiIndex]) applyAiPerson(aiPeople[activeAiIndex], activeAiIndex);
+        });
+      });
+    }
+    syncBatchPayload();
+  }
+
+  function renderAiPeople(payload, options = {}) {
+    const people = Array.isArray(payload && payload.people) ? payload.people : [];
+    if (!people.length) return false;
+    aiPayload = payload;
+    aiPeople = people.map((person) => ({...person}));
+    activeAiIndex = 0;
+    renderWorkingPeople();
+
+    if (aiSourceNotes) {
+      aiSourceNotes.textContent = payload.source_notes ? `AI source note: ${payload.source_notes}` : '';
+      aiSourceNotes.style.display = payload.source_notes ? 'block' : 'none';
+    }
+    if (apiUsage && payload.usage) {
+      const usage = payload.usage || {};
+      apiUsage.textContent = `${payload.model || 'OpenAI model'} • ${usage.input_tokens || 0} input tokens • ${usage.output_tokens || 0} output tokens`;
+      apiUsage.style.display = 'block';
+    }
+
+    const preferredIndex = aiPeople.findIndex((person) => !alreadyEnteredNames.has(folded(person && person.name)));
+    applyAiPerson(aiPeople[preferredIndex >= 0 ? preferredIndex : 0], preferredIndex >= 0 ? preferredIndex : 0);
+    if (!options.fromCache) saveWorkingPayload();
+    return true;
+  }
+
+  function loadNextPerson() {
+    if (!aiPeople.length) return false;
+    const next = (activeAiIndex + 1) % aiPeople.length;
+    applyAiPerson(aiPeople[next], next);
+    return true;
+  }
+
+  async function runBackendPrefill() {
+    if (apiRun) apiRun.disabled = true;
+    if (apiStatus) apiStatus.textContent = 'Reading the source and extracting explicitly reported missing people…';
+    try {
+      const response = await fetch(`/admin/discovery/${candidateId}/openai-prefill`, {method: 'POST', credentials: 'same-origin'});
+      const payload = await response.json();
+      if (!response.ok) throw new Error(payload.error || 'Backend AI Prefill failed.');
+      if (!renderAiPeople(payload)) throw new Error('No supported missing-person records were returned.');
+      if (apiStatus) apiStatus.textContent = aiPeople.length > 1
+        ? `Done. ${aiPeople.length} supported missing people found. Remove any wrong suggestion, add anyone missed, then save the selected list.`
+        : 'Done. Review the fields, then Save & Publish.';
+      return true;
+    } catch (error) {
+      if (apiStatus) apiStatus.textContent = `AI Prefill failed: ${error.message}`;
+      return false;
+    } finally {
+      if (apiRun) apiRun.disabled = false;
+    }
+  }
+
+  async function addAnotherFromPost() {
+    if (!aiPeople.length) {
+      const ok = await runBackendPrefill();
+      if (!ok) return;
+    }
+    loadNextPerson();
+  }
+
+  function addBlankPerson() {
+    aiPeople.push(blankPerson());
+    activeAiIndex = aiPeople.length - 1;
+    renderWorkingPeople();
+    applyAiPerson(aiPeople[activeAiIndex], activeAiIndex);
+  }
+
+  function restoreCachedPayload() {
+    try {
+      const raw = sessionStorage.getItem(cacheKey);
+      if (!raw) return;
+      const payload = JSON.parse(raw);
+      if (renderAiPeople(payload, {fromCache: true}) && apiStatus) {
+        apiStatus.textContent = 'Restored the earlier AI extraction for this post. No new API request was made.';
+      }
+    } catch (error) {
+      try { sessionStorage.removeItem(cacheKey); } catch (ignored) {}
+    }
+  }
+
+  async function copyAiPrompt() {
+    if (!aiPrompt) return;
+    try {
+      await navigator.clipboard.writeText(aiPrompt.value);
+    } catch (error) {
+      aiPrompt.focus(); aiPrompt.select(); document.execCommand('copy');
+    }
+    if (aiCopyStatus) aiCopyStatus.textContent = 'Prompt copied.';
+  }
+
+  async function applyAiJson() {
+    if (!aiJson || !aiStatus) return;
+    aiStatus.textContent = 'Checking result…';
+    try {
+      const form = new FormData();
+      form.append('result_json', aiJson.value || '');
+      const response = await fetch(`/admin/discovery/${candidateId}/chatgpt-prefill/parse`, {method: 'POST', body: form, credentials: 'same-origin'});
+      const payload = await response.json();
+      if (!response.ok) throw new Error(payload.error || 'Could not parse result.');
+      if (!renderAiPeople(payload)) throw new Error('No person objects were found.');
+      aiStatus.textContent = `${aiPeople.length} person record(s) loaded. Review the list before saving.`;
+    } catch (error) {
+      aiStatus.textContent = `Could not apply result: ${error.message}`;
+    }
+  }
+
+  async function checkDuplicates() {
+    if (!fields.name || !warning) return;
+    const name = fields.name.value.trim();
+    if (!name) { warning.style.display = 'none'; warning.innerHTML = ''; return; }
+    const params = new URLSearchParams({
+      name,
+      location: fields.last_seen_location ? (fields.last_seen_location.value || '') : '',
+      phone: fields.public_contact_number ? (fields.public_contact_number.value || '') : ''
+    });
+    if (fields.age && fields.age.value) params.set('age', fields.age.value);
+    try {
+      const response = await fetch(`/admin/discovery/${candidateId}/duplicate-check?${params.toString()}`, {credentials: 'same-origin'});
+      if (!response.ok) return;
+      const data = await response.json();
+      const exact = (data.people || []).filter((item) => item.exact_name);
+      const similar = (data.people || []).filter((item) => !item.exact_name && item.score >= 70);
+      if (!exact.length && !similar.length && !(data.pending || []).length) {
+        warning.style.display = 'none'; warning.innerHTML = ''; return;
+      }
+      let html = '<h3>⚠ Possible duplicate person</h3>';
+      if (exact.length) {
+        html += '<p><strong>The same name already exists.</strong> Attach this source if it is the same person.</p>';
+        for (const item of exact) {
+          html += `<label style="display:block; margin:8px 0"><input type="radio" name="duplicate_action" value="attach:${item.id}" required> Attach to ${escapeHtml(item.case_number)} — ${escapeHtml(item.name)}${item.last_seen_location ? ' — ' + escapeHtml(item.last_seen_location) : ''}</label>`;
+        }
+        html += '<label style="display:block; margin:8px 0"><input type="radio" name="duplicate_action" value="continue" required> Different person with the same name.</label>';
+      }
+      if (similar.length) {
+        html += '<p><strong>Similar existing cases:</strong></p><ul>';
+        similar.forEach((item) => { html += `<li>${escapeHtml(item.case_number)} — ${escapeHtml(item.name)} — ${escapeHtml(item.score)}%</li>`; });
+        html += '</ul>';
+      }
+      if ((data.pending || []).length) {
+        html += '<p><strong>A pending record with this name also exists.</strong></p>';
+        if (!exact.length) html += '<label style="display:block; margin:8px 0"><input type="radio" name="duplicate_action" value="continue" required> I reviewed it and still want a separate record.</label>';
+      }
+      warning.innerHTML = html;
+      warning.style.display = 'block';
+    } catch (error) {
+      // Server-side duplicate protections remain authoritative.
+    }
+  }
+
+  function scheduleCheck() {
+    clearTimeout(timer);
+    timer = setTimeout(checkDuplicates, 250);
+  }
+
+  Object.values(fields).forEach((element) => {
+    if (!element) return;
+    element.addEventListener('input', () => {
+      syncActivePersonFromForm();
+      if ([fields.name, fields.age, fields.last_seen_location, fields.public_contact_number].includes(element)) scheduleCheck();
+    });
+    element.addEventListener('change', syncActivePersonFromForm);
+  });
+  if (detectedPicker) detectedPicker.addEventListener('change', function () {
+    if (this.value && fields.name) { fields.name.value = this.value; scheduleCheck(); }
+  });
+  if (apiRun) apiRun.addEventListener('click', runBackendPrefill);
+  if (multipleAddAnother) multipleAddAnother.addEventListener('click', addAnotherFromPost);
+  if (aiAddAnother) aiAddAnother.addEventListener('click', addAnotherFromPost);
+  if (aiAddBlank) aiAddBlank.addEventListener('click', addBlankPerson);
+  if (aiCopy) aiCopy.addEventListener('click', copyAiPrompt);
+  if (aiApply) aiApply.addEventListener('click', applyAiJson);
+  if (aiPeoplePicker) aiPeoplePicker.addEventListener('change', function () {
+    const index = Number(this.value);
+    if (Number.isInteger(index) && aiPeople[index]) applyAiPerson(aiPeople[index], index);
+  });
+  if (aiBatchForm) aiBatchForm.addEventListener('submit', (event) => {
+    syncActivePersonFromForm();
+    const raw = payloadForBatch();
+    if (!raw) {
+      event.preventDefault();
+      const target = apiStatus || aiStatus;
+      if (target) target.textContent = 'Run AI Prefill or add at least one person before saving.';
+      return;
+    }
+    if (aiBatchJson) aiBatchJson.value = raw;
+    saveWorkingPayload();
+  });
+
+  restoreCachedPayload();
+  checkDuplicates();
+})();
+</script>
+
 {% endblock %}

@@ -1,0 +1,207 @@
+{% extends "base.html" %}
+{% block content %}
+
+<h1>Review Discovery Candidate</h1>
+
+<div class="card">
+
+  <p>
+    <span class="badge">
+      {{ candidate.platform }}
+    </span>
+
+    <a
+      href="{{ candidate.url }}"
+      target="_blank"
+      rel="noopener noreferrer"
+    >
+      Open original public post
+    </a>
+  </p>
+
+  <h2>
+    {{ candidate.title or 'Untitled result' }}
+  </h2>
+
+  <pre class="wrap">{{ candidate.snippet or '' }}</pre>
+
+</div>
+
+
+{% if source_image_url %}
+
+<div class="card">
+
+  <h2>Picture found in public source</h2>
+
+  <img
+    src="{{ source_image_url }}"
+    alt="Image attached to the public missing-person post"
+    style="
+      max-width:420px;
+      max-height:420px;
+      object-fit:contain;
+      border-radius:8px;
+    "
+  >
+
+  <p class="muted">
+    The bot found this image in the public post metadata.
+    Confirm that the source itself associates this image with
+    the named missing person before approval.
+  </p>
+
+</div>
+
+{% endif %}
+
+
+<form
+  method="post"
+  action="/admin/discovery/{{ candidate.id }}/submission"
+  class="card"
+>
+
+  <h2>Bot-extracted missing-person details</h2>
+
+  <p class="muted">
+    Review and correct these fields before creating the
+    pending record.
+  </p>
+
+
+  <div class="inline">
+
+    <div>
+      <label>Name *</label>
+
+      <input
+        name="name"
+        value="{{ prefill.name or '' }}"
+        required
+      >
+    </div>
+
+    <div>
+      <label>Nepali name</label>
+
+      <input
+        name="name_ne"
+        value="{{ prefill.name_ne or '' }}"
+      >
+    </div>
+
+    <div>
+      <label>Age</label>
+
+      <input
+        type="number"
+        name="age"
+        value="{{ prefill.age or '' }}"
+      >
+    </div>
+
+  </div>
+
+
+  <div class="inline">
+
+    <div>
+      <label>Gender</label>
+
+      <input
+        name="gender"
+        value="{{ prefill.gender or '' }}"
+      >
+    </div>
+
+    <div>
+      <label>Last-seen date</label>
+
+      <input
+        type="date"
+        name="last_seen_date"
+        value="{{ prefill.last_seen_date or '' }}"
+      >
+    </div>
+
+    <div>
+      <label>Last-seen time</label>
+
+      <input
+        type="time"
+        name="last_seen_time"
+        value="{{ prefill.last_seen_time or '' }}"
+      >
+    </div>
+
+  </div>
+
+
+  <label>
+    Last-seen / affected location *
+  </label>
+
+  <input
+    name="last_seen_location"
+    value="{{ prefill.last_seen_location or '' }}"
+    required
+  >
+
+
+  <label>Clothing</label>
+
+  <textarea name="clothing">{{ prefill.clothing or '' }}</textarea>
+
+
+  <label>Identification / source details</label>
+
+  <textarea name="identification_details">{{ prefill.identification_details or '' }}</textarea>
+
+
+  <label>Public information contact</label>
+
+  <input
+    name="public_contact_number"
+    value="{{ prefill.public_contact_number or '' }}"
+  >
+
+
+  {% if source_image_url %}
+
+  <input
+    type="hidden"
+    name="source_image_url"
+    value="{{ source_image_url }}"
+  >
+
+  <p>
+    <label>
+      <input
+        type="checkbox"
+        name="include_source_image"
+        value="1"
+        checked
+      >
+      Include this reviewed source image in the pending
+      missing-person record
+    </label>
+  </p>
+
+  {% endif %}
+
+
+  <button>
+    Create Prefilled Pending Submission
+  </button>
+
+</form>
+
+
+<p class="muted">
+  The system retrieves an image from the source post.
+  It does not identify a person using facial recognition or
+  infer identity from appearance.
+</p>
+
+{% endblock %}

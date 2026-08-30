@@ -1,0 +1,273 @@
+{% extends "base.html" %}
+{% block content %}
+
+<h1>Public Social Discovery</h1>
+
+<p class="muted">
+  V0 searches public web indexes only. It never logs into Facebook or accesses
+  closed/private groups. Every result remains subject to admin review.
+</p>
+
+<form method="get" class="card inline">
+  <div>
+    <label>Event</label>
+    <select name="disaster_id">
+      {% for d in disasters %}
+      <option value="{{ d.id }}" {% if selected and selected.id == d.id %}selected{% endif %}>
+        {{ d.name }}
+      </option>
+      {% endfor %}
+    </select>
+  </div>
+
+  <div>
+    <label>Platform</label>
+    <select name="platform">
+      {% for p in ['facebook','web','instagram','tiktok','x','reddit'] %}
+      <option value="{{ p }}" {% if platform == p %}selected{% endif %}>{{ p }}</option>
+      {% endfor %}
+    </select>
+  </div>
+
+  <input type="hidden" name="view" value="{{ view }}">
+
+  <div>
+    <button>Load Discovery</button>
+  </div>
+</form>
+
+{% if selected %}
+
+{% if wide_error %}
+<div class="notice">
+  <strong>Wide Discovery could not run.</strong><br>
+  The configured Serper / Google Search provider is unavailable, rejected, or
+  has reached its quota.
+</div>
+{% endif %}
+
+{% if wide_stats %}
+<div class="notice">
+  <strong>Wide Discovery finished</strong><br>
+  Queries searched: {{ wide_stats.queries }}<br>
+  Raw search results: {{ wide_stats.raw }}<br>
+  New candidates sent to review: {{ wide_stats.added }}
+</div>
+{% endif %}
+
+<div class="card">
+  <h2>Findings queue</h2>
+  <p class="muted">
+    Relevant and irrelevant decisions are retained. Nothing is deleted, so an
+    administrator can restore a result later if it was classified incorrectly.
+  </p>
+
+  <div class="inline" style="gap:8px; flex-wrap:wrap">
+    <a href="{{ queue_links.review }}">To Review ({{ queue_counts.review }})</a>
+    <a href="{{ queue_links.relevant }}">Relevant ({{ queue_counts.relevant }})</a>
+    <a href="{{ queue_links.irrelevant }}">Irrelevant ({{ queue_counts.irrelevant }})</a>
+    <a href="{{ queue_links.processed }}">Processed ({{ queue_counts.processed }})</a>
+  </div>
+</div>
+
+<form method="get" class="card inline">
+  <input type="hidden" name="disaster_id" value="{{ selected.id }}">
+  <input type="hidden" name="platform" value="{{ platform }}">
+  <input type="hidden" name="view" value="{{ view }}">
+
+  <div style="min-width:320px; flex:1">
+    <label>Search findings by person name</label>
+    <input
+      name="q"
+      value="{{ q }}"
+      placeholder="Name in English or Nepali"
+      autocomplete="off"
+    >
+  </div>
+
+  <div>
+    <button>Search Findings</button>
+  </div>
+
+  {% if q %}
+  <div>
+    <a href="{{ clear_search_url }}">Clear search</a>
+  </div>
+  {% endif %}
+</form>
+
+<div class="grid">
+  <div class="card">
+    <h2>Automated Discovery</h2>
+    <p>Runs the bounded public-web discovery collector and person-level filters.</p>
+    <form method="post" action="/admin/discovery/run">
+      <input type="hidden" name="disaster_id" value="{{ selected.id }}">
+      <input type="hidden" name="platform" value="{{ platform }}">
+      <button>Run Discovery Bot</button>
+    </form>
+  </div>
+
+  {% if platform == 'facebook' %}
+  <div class="card">
+    <h2>Wide Discovery</h2>
+    <p>
+      Person-focused Facebook discovery using affected places, stronger
+      missing-person phrases, the event date window, and human-confirmed
+      productive sources.
+    </p>
+
+    <p>
+      <strong>Provider:</strong> {{ wide_provider_status.name }} —
+      {% if wide_provider_status.available %}
+        <span class="badge">READY</span>
+      {% else %}
+        <span class="badge">NOT CONFIGURED</span>
+      {% endif %}
+    </p>
+
+    <p class="muted">{{ wide_provider_status.detail }}</p>
+
+    {% if wide_provider_status.available %}
+    <form method="post" action="/admin/wide-discovery/run">
+      <input type="hidden" name="disaster_id" value="{{ selected.id }}">
+      <button>Run Wide Discovery</button>
+    </form>
+    {% else %}
+    <button disabled>Run Wide Discovery</button>
+    <p class="muted">Set SERPER_API_KEY in the server environment to enable it.</p>
+    {% endif %}
+
+    <p class="muted">
+      A run uses at most 40 search queries. Avoid repeating it unnecessarily.
+    </p>
+
+    <details style="margin-top:12px">
+      <summary>Show Wide Search Plan ({{ wide_query_plan|length }} queries)</summary>
+      <div style="max-height:420px; overflow:auto; margin-top:10px">
+        {% for query in wide_query_plan %}
+        <p><strong>{{ '%03d'|format(loop.index) }}.</strong> <code>{{ query }}</code></p>
+        {% else %}
+        <p>No wide queries generated.</p>
+        {% endfor %}
+      </div>
+    </details>
+  </div>
+  {% endif %}
+
+  <div class="card">
+    <h2>Free AI Review</h2>
+    <p>
+      Review collected candidates using a free interactive AI session. No AI
+      API call is made.
+    </p>
+    <form method="get" action="/admin/ai-review">
+      <input type="hidden" name="disaster_id" value="{{ selected.id }}">
+      <input type="hidden" name="platform" value="{{ platform }}">
+      <button>Prepare Free AI Review</button>
+    </form>
+  </div>
+
+  <div class="card">
+    <h2>Manual URL Intake</h2>
+    <form method="post" action="/admin/discovery/manual">
+      <input type="hidden" name="disaster_id" value="{{ selected.id }}">
+      <input type="hidden" name="platform" value="{{ platform }}">
+      <label>Public source URL</label>
+      <input type="url" name="url" required>
+      <label>Title</label>
+      <input name="title">
+      <label>Snippet/note</label>
+      <textarea name="snippet"></textarea>
+      <button>Add Candidate</button>
+    </form>
+  </div>
+</div>
+
+<details style="margin-top:18px">
+  <summary>Targeted manual searches</summary>
+  <div class="card">
+    {% for query, url in queries %}
+    <p>
+      <a href="{{ url }}" target="_blank" rel="noopener noreferrer">Search</a>
+      — <code>{{ query }}</code>
+    </p>
+    {% else %}
+    <p>No queries.</p>
+    {% endfor %}
+  </div>
+</details>
+
+<h2>
+  {% if view == 'review' %}To Review{% elif view == 'relevant' %}Relevant Findings{% elif view == 'irrelevant' %}Irrelevant Archive{% else %}Processed Findings{% endif %}
+</h2>
+
+<table>
+  <thead>
+    <tr>
+      <th>Platform</th>
+      <th>Candidate</th>
+      <th>Status</th>
+      <th>Review</th>
+      <th>Classification</th>
+    </tr>
+  </thead>
+  <tbody>
+    {% for c in candidates %}
+    <tr>
+      <td>{{ c.platform }}</td>
+      <td>
+        <a href="{{ c.url }}" target="_blank" rel="noopener noreferrer">
+          {{ c.title or c.url }}
+        </a>
+        <br>
+        <span class="muted">{{ c.snippet or '' }}</span>
+      </td>
+      <td>{{ c.status }}</td>
+      <td><a href="/admin/discovery/{{ c.id }}">Review Details</a></td>
+      <td>
+        {% if c.status in ['new', 'needs_ai'] %}
+        <form method="post" action="/admin/discovery/{{ c.id }}/status" style="display:inline">
+          <input type="hidden" name="status_action" value="relevant">
+          <input type="hidden" name="platform" value="{{ platform }}">
+          <input type="hidden" name="view" value="{{ view }}">
+          <input type="hidden" name="q" value="{{ q }}">
+          <button>✓ Relevant</button>
+        </form>
+        <form method="post" action="/admin/discovery/{{ c.id }}/status" style="display:inline">
+          <input type="hidden" name="status_action" value="irrelevant">
+          <input type="hidden" name="platform" value="{{ platform }}">
+          <input type="hidden" name="view" value="{{ view }}">
+          <input type="hidden" name="q" value="{{ q }}">
+          <button class="secondary">Not relevant</button>
+        </form>
+        {% elif c.status == 'relevant' %}
+        <form method="post" action="/admin/discovery/{{ c.id }}/status" style="display:inline">
+          <input type="hidden" name="status_action" value="irrelevant">
+          <input type="hidden" name="platform" value="{{ platform }}">
+          <input type="hidden" name="view" value="{{ view }}">
+          <input type="hidden" name="q" value="{{ q }}">
+          <button class="secondary">Move to Irrelevant</button>
+        </form>
+        {% elif c.status in ['irrelevant', 'rejected'] %}
+        <form method="post" action="/admin/discovery/{{ c.id }}/status" style="display:inline">
+          <input type="hidden" name="status_action" value="restore">
+          <input type="hidden" name="platform" value="{{ platform }}">
+          <input type="hidden" name="view" value="{{ view }}">
+          <input type="hidden" name="q" value="{{ q }}">
+          <button>Restore to Review</button>
+        </form>
+        {% else %}
+        <span class="muted">Already processed</span>
+        {% endif %}
+      </td>
+    </tr>
+    {% else %}
+    <tr>
+      <td colspan="5">No findings in this section.</td>
+    </tr>
+    {% endfor %}
+  </tbody>
+</table>
+
+{% endif %}
+{% endblock %}

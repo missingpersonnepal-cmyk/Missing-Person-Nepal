@@ -1,0 +1,159 @@
+{% extends "base.html" %}
+{% block content %}
+
+<h1>Review Discovery Candidate</h1>
+
+<div class="card">
+  <p>
+    <span class="badge">{{ candidate.platform }}</span>
+    <span class="badge">{{ candidate.status }}</span>
+    <a href="{{ candidate.url }}" target="_blank" rel="noopener noreferrer">
+      Open original public post
+    </a>
+  </p>
+
+  <h2>{{ candidate.title or 'Untitled result' }}</h2>
+  <pre class="wrap">{{ candidate.snippet or '' }}</pre>
+
+  {% if candidate.status in ['new', 'needs_ai'] %}
+  <div class="inline" style="margin-top:12px">
+    <form method="post" action="/admin/discovery/{{ candidate.id }}/status">
+      <input type="hidden" name="status_action" value="relevant">
+      <input type="hidden" name="platform" value="{{ candidate.platform }}">
+      <input type="hidden" name="view" value="review">
+      <button>✓ Mark Relevant</button>
+    </form>
+    <form method="post" action="/admin/discovery/{{ candidate.id }}/status">
+      <input type="hidden" name="status_action" value="irrelevant">
+      <input type="hidden" name="platform" value="{{ candidate.platform }}">
+      <input type="hidden" name="view" value="review">
+      <button class="secondary">Mark Irrelevant</button>
+    </form>
+  </div>
+  {% elif candidate.status in ['irrelevant', 'rejected'] %}
+  <form method="post" action="/admin/discovery/{{ candidate.id }}/status">
+    <input type="hidden" name="status_action" value="restore">
+    <input type="hidden" name="platform" value="{{ candidate.platform }}">
+    <input type="hidden" name="view" value="irrelevant">
+    <button>Restore to Review</button>
+  </form>
+  {% endif %}
+</div>
+
+{% if source_image_url %}
+<div class="card">
+  <h2>Picture found in public source</h2>
+  <img
+    src="{{ source_image_url }}"
+    alt="Image attached to the public missing-person post"
+    style="max-width:520px; max-height:520px; object-fit:contain; border-radius:8px"
+  >
+  <p class="muted">
+    Source evidence only. OCR may read written text from this image, but the
+    system does not identify a person from their face or infer identity from appearance.
+  </p>
+</div>
+{% endif %}
+
+{% if ocr_text or ocr_detail %}
+<div class="card">
+  <h2>Text detected in source image</h2>
+  {% if ocr_detail %}<p class="muted">{{ ocr_detail }}</p>{% endif %}
+  {% if ocr_text %}
+  <pre class="wrap">{{ ocr_text }}</pre>
+  {% else %}
+  <p>No OCR text was detected.</p>
+  {% endif %}
+</div>
+{% endif %}
+
+<form
+  method="post"
+  action="/admin/discovery/{{ candidate.id }}/submission"
+  class="card"
+>
+  <h2>Bot-extracted missing-person details</h2>
+  <p class="muted">
+    Title, snippet and any detected poster text are used only as source evidence.
+    Review and correct every field before creating the pending record.
+  </p>
+
+  {% if ocr_text %}
+  <textarea name="ocr_text" style="display:none">{{ ocr_text }}</textarea>
+  {% endif %}
+
+  <div class="inline">
+    <div>
+      <label>Name *</label>
+      <input name="name" value="{{ prefill.name or '' }}" required>
+    </div>
+    <div>
+      <label>Nepali name</label>
+      <input name="name_ne" value="{{ prefill.name_ne or '' }}">
+    </div>
+    <div>
+      <label>Age</label>
+      <input type="number" name="age" value="{{ prefill.age or '' }}">
+    </div>
+  </div>
+
+  <div class="inline">
+    <div>
+      <label>Gender</label>
+      <select name="gender">
+        <option value="" {% if not prefill.gender %}selected{% endif %}>Unknown</option>
+        <option value="Male" {% if prefill.gender == 'Male' %}selected{% endif %}>Male</option>
+        <option value="Female" {% if prefill.gender == 'Female' %}selected{% endif %}>Female</option>
+      </select>
+    </div>
+    <div>
+      <label>Last-seen date</label>
+      <input type="date" name="last_seen_date" value="{{ prefill.last_seen_date or '' }}">
+    </div>
+    <div>
+      <label>Last-seen time</label>
+      <input type="time" name="last_seen_time" value="{{ prefill.last_seen_time or '' }}">
+    </div>
+  </div>
+
+  <label>Last-seen / affected location *</label>
+  <input name="last_seen_location" value="{{ prefill.last_seen_location or '' }}" required>
+
+  <label>Clothing</label>
+  <textarea name="clothing">{{ prefill.clothing or '' }}</textarea>
+
+  <label>Identification / source details</label>
+  <textarea name="identification_details" rows="8">{{ prefill.identification_details or '' }}</textarea>
+
+  <label>Public information contact</label>
+  <input name="public_contact_number" value="{{ prefill.public_contact_number or '' }}">
+
+  {% if source_image_url %}
+  <input type="hidden" name="source_image_url" value="{{ source_image_url }}">
+  <p>
+    <label>
+      <input type="checkbox" name="include_source_image" value="1" checked>
+      Include this reviewed source image in the pending missing-person record
+    </label>
+  </p>
+  {% endif %}
+
+  {% if candidate.status not in ['irrelevant', 'rejected'] %}
+  <button>
+    {% if candidate.status == 'reviewed' %}
+      Create Another Pending Submission From This Source
+    {% else %}
+      Create Prefilled Pending Submission
+    {% endif %}
+  </button>
+  {% else %}
+  <p class="muted">Restore this candidate to review before creating a submission.</p>
+  {% endif %}
+</form>
+
+<p class="muted">
+  The system reads only public text and written text detected in source images.
+  It does not use facial recognition or infer identity from appearance.
+</p>
+
+{% endblock %}

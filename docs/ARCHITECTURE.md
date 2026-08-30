@@ -41,7 +41,7 @@ The discovery service is an adapter. If a future approved Meta/search API become
 
 SQLAlchemy uses `DATABASE_URL`. PostgreSQL is the intended shared database. SQLite remains useful for local tests and emergency development only.
 
-Tables are prefixed `mp_` so the project can share an existing Aiven PostgreSQL database safely.
+Tables are prefixed `mp_` so the project can share an existing Supabase PostgreSQL database safely.
 
 ## Trust boundaries
 

@@ -4,12 +4,12 @@ from pathlib import Path
 
 from fastapi import APIRouter, Request
 from fastapi.responses import FileResponse, HTMLResponse
-from sqlalchemy import or_, select
+from sqlalchemy import func, or_, select
 from sqlalchemy.orm import selectinload
 
 from ..config import settings
 from ..database import SessionLocal
-from ..models import Disaster, MissingPerson, Submission
+from ..models import Disaster, MissingPerson, PersonCaseState, Submission
 from ..services.files import save_image
 from ..services.normalization import canonicalize_url
 from .common import parse_date, parse_int, parse_time, render
@@ -49,7 +49,12 @@ def home(request: Request, q: str = "", location: str = "", disaster_id: int | N
         stmt = (
             select(MissingPerson)
             .options(selectinload(MissingPerson.sources))
-            .where(MissingPerson.published.is_(True), MissingPerson.archived.is_(False))
+            .outerjoin(PersonCaseState, PersonCaseState.person_id == MissingPerson.id)
+            .where(
+                MissingPerson.published.is_(True),
+                MissingPerson.archived.is_(False),
+                func.coalesce(PersonCaseState.status, "missing") == "missing",
+            )
             .order_by(MissingPerson.created_at.desc())
         )
         if disaster_id:

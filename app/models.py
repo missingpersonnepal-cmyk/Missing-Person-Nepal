@@ -122,6 +122,58 @@ class DiscoveryCandidate(Base):
     found_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
 
 
+class DiscoverySearchTag(Base):
+    __tablename__ = "mp_discovery_search_tags"
+    __table_args__ = (
+        UniqueConstraint(
+            "disaster_id", "platform", "tag",
+            name="uq_mp_discovery_search_tag",
+        ),
+    )
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    disaster_id: Mapped[int] = mapped_column(ForeignKey("mp_disasters.id"), index=True)
+    platform: Mapped[str] = mapped_column(String(40), default="facebook", index=True)
+    tag: Mapped[str] = mapped_column(String(255))
+    active: Mapped[bool] = mapped_column(Boolean, default=True, index=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
+
+
+class DiscoverySourceSeed(Base):
+    __tablename__ = "mp_discovery_source_seeds"
+    __table_args__ = (
+        UniqueConstraint(
+            "disaster_id", "platform", "scope",
+            name="uq_mp_discovery_source_seed",
+        ),
+    )
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    disaster_id: Mapped[int] = mapped_column(ForeignKey("mp_disasters.id"), index=True)
+    platform: Mapped[str] = mapped_column(String(40), default="facebook", index=True)
+    label: Mapped[str] = mapped_column(String(255))
+    scope: Mapped[str] = mapped_column(String(255))
+    source_url: Mapped[str | None] = mapped_column(Text, nullable=True)
+    active: Mapped[bool] = mapped_column(Boolean, default=True, index=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
+
+
+class PersonCaseState(Base):
+    __tablename__ = "mp_person_case_states"
+
+    person_id: Mapped[int] = mapped_column(
+        ForeignKey("mp_missing_people.id"),
+        primary_key=True,
+    )
+    status: Mapped[str] = mapped_column(String(30), default="missing", index=True)
+    note: Mapped[str | None] = mapped_column(Text, nullable=True)
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        default=utcnow,
+        onupdate=utcnow,
+    )
+
+
 class AdminUser(Base):
     __tablename__ = "mp_admins"
 

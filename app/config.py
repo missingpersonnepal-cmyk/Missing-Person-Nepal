@@ -23,8 +23,8 @@ class Settings:
     cookie_secure: bool = _as_bool(os.getenv("COOKIE_SECURE"), False)
     upload_dir: Path = Path(os.getenv("UPLOAD_DIR", "uploads"))
     export_dir: Path = Path(os.getenv("EXPORT_DIR", "exports"))
-    discovery_max_queries_per_run: int = int(os.getenv("DISCOVERY_MAX_QUERIES_PER_RUN", "12"))
-    discovery_results_per_query: int = int(os.getenv("DISCOVERY_RESULTS_PER_QUERY", "8"))
+    discovery_max_queries_per_run: int = int(os.getenv("DISCOVERY_MAX_QUERIES_PER_RUN", "24"))
+    discovery_results_per_query: int = int(os.getenv("DISCOVERY_RESULTS_PER_QUERY", "10"))
     discovery_request_delay_seconds: float = float(os.getenv("DISCOVERY_REQUEST_DELAY_SECONDS", "1.0"))
     discovery_timeout_seconds: float = float(os.getenv("DISCOVERY_TIMEOUT_SECONDS", "15"))
 

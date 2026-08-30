@@ -2,7 +2,7 @@
 
 V0 is a deliberately lean disaster-time missing-person aggregation system. It collects public reports and direct submissions, keeps original source links, warns admins about likely duplicate people, publishes a searchable public list, and allows administrators to export consolidated data.
 
-The project is designed to use an existing **Aiven PostgreSQL** database through `DATABASE_URL`. It does not require a paid Meta, search, AI, SMS, hosting, or authentication API for development.
+The project is designed to use an existing **Supabase PostgreSQL** database through `DATABASE_URL`. It does not require a paid Meta, search, AI, SMS, hosting, or authentication API for development.
 
 ## V0 mission
 
@@ -90,7 +90,7 @@ The important setting is:
 DATABASE_URL=postgresql+psycopg://USER:PASSWORD@HOST:PORT/defaultdb?sslmode=require
 ```
 
-For the existing Aiven database, use the Aiven service URI adapted to SQLAlchemy's `postgresql+psycopg://` driver. Never commit the URI or credentials.
+For the existing Supabase database, use the project connection string in `DATABASE_URL` and let the app normalize plain `postgresql://` URLs to SQLAlchemy's `postgresql+psycopg://` driver. Never commit the URI or credentials.
 
 Other important settings:
 
@@ -101,7 +101,7 @@ ADMIN_PASSWORD=<strong initial password>
 AUTO_CREATE_TABLES=false
 ```
 
-Use `AUTO_CREATE_TABLES=true` only for quick local development. With Aiven/PostgreSQL, prefer Alembic migrations.
+Use `AUTO_CREATE_TABLES=true` only for quick local development. With Supabase/PostgreSQL, prefer Alembic migrations.
 
 ## Database setup
 

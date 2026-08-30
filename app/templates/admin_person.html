@@ -1,10 +1,25 @@
 {% extends "base.html" %}
 {% block content %}
 <h1>{{ person.case_number }} — {{ person.name }}</h1>
+<div class="card">
+  <strong>Case status:</strong>
+  {% if case_status == "found" %}<span class="badge">FOUND ALIVE</span>
+  {% elif case_status == "identified" %}<span class="badge">IDENTIFIED / DECEASED</span>
+  {% else %}<span class="badge">MISSING</span>{% endif %}
+  <p class="muted">Found and Identified cases are automatically removed from the active public missing-person list. You can restore Missing if the status was entered incorrectly.</p>
+  <form method="post" action="/admin/people/{{ person.id }}/status" class="inline">
+    <div><label>Status note</label><input name="status_note" placeholder="Optional confirmation/source note"></div>
+    <div>
+      {% if case_status != "missing" %}<button name="case_status" value="missing">Mark Missing</button>{% endif %}
+      {% if case_status != "found" %}<button name="case_status" value="found">Found Alive</button>{% endif %}
+      {% if case_status != "identified" %}<button class="danger" name="case_status" value="identified">Identified / Deceased</button>{% endif %}
+    </div>
+  </form>
+</div>
 {% if person.photo_path %}<div class="card"><img src="/admin/media/{{ person.photo_path }}" alt="Person photo" style="max-width:300px;max-height:300px;object-fit:cover"></div>{% endif %}
 <form method="post" action="/admin/people/{{ person.id }}/edit" class="card">
 <div class="inline"><div><label>Name</label><input name="name" value="{{ person.name }}"></div><div><label>Nepali name</label><input name="name_ne" value="{{ person.name_ne or '' }}"></div><div><label>Age</label><input type="number" name="age" value="{{ person.age or '' }}"></div></div>
-<div class="inline"><div><label>Gender</label><input name="gender" value="{{ person.gender or '' }}"></div><div><label>Last-seen date</label><input type="date" name="last_seen_date" value="{{ person.last_seen_date or '' }}"></div><div><label>Last-seen time</label><input type="time" name="last_seen_time" value="{{ person.last_seen_time or '' }}"></div></div>
+<div class="inline"><div><label>Gender</label><select name="gender"><option value="" {% if not person.gender %}selected{% endif %}>Unknown</option><option value="Male" {% if person.gender == 'Male' %}selected{% endif %}>Male</option><option value="Female" {% if person.gender == 'Female' %}selected{% endif %}>Female</option></select></div><div><label>Last-seen date</label><input type="date" name="last_seen_date" value="{{ person.last_seen_date or '' }}"></div><div><label>Last-seen time</label><input type="time" name="last_seen_time" value="{{ person.last_seen_time or '' }}"></div></div>
 <label>Last-seen location</label><input name="last_seen_location" value="{{ person.last_seen_location }}"><label>Clothing</label><textarea name="clothing">{{ person.clothing or '' }}</textarea><label>Identification details</label><textarea name="identification_details">{{ person.identification_details or '' }}</textarea><label>Public contact</label><input name="public_contact_number" value="{{ person.public_contact_number or '' }}"><label>Residential address (private)</label><textarea name="residential_address_private">{{ person.residential_address_private or '' }}</textarea><button>Save</button></form>
 <div class="card"><form method="post" action="/admin/people/{{ person.id }}/publish" style="display:inline"><button>{{ 'Unpublish' if person.published else 'Publish' }}</button></form><form method="post" action="/admin/people/{{ person.id }}/archive" style="display:inline"><button class="danger">Archive</button></form><a class="button secondary" href="/admin/people/{{ person.id }}/share-card" target="_blank">Share card</a></div>
 <div class="card"><h2>Facebook / group share text</h2><textarea readonly>Missing person: {{ person.name }}{% if person.name_ne %} / {{ person.name_ne }}{% endif %}

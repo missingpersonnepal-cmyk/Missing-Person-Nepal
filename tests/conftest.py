@@ -1,7 +1,9 @@
 import os
+import uuid
 from pathlib import Path
 
-os.environ["DATABASE_URL"] = "sqlite:///./test_missing_person.db"
+TEST_DB_NAME = f"test_missing_person_{uuid.uuid4().hex}.db"
+os.environ["DATABASE_URL"] = f"sqlite:///./{TEST_DB_NAME}"
 os.environ["SESSION_SECRET"] = "test-session-secret"
 os.environ["ADMIN_USERNAME"] = "admin"
 os.environ["ADMIN_PASSWORD"] = "test-password"
@@ -23,6 +25,10 @@ def reset_db():
     seed_admin()
     yield
     Base.metadata.drop_all(engine)
+    engine.dispose()
+    db_path = Path(TEST_DB_NAME)
+    if db_path.exists():
+        db_path.unlink()
     for folder in (Path("test_uploads"), Path("test_exports")):
         if folder.exists():
             for child in folder.iterdir():

@@ -1,11 +1,11 @@
 from __future__ import annotations
 
 from fastapi import APIRouter, HTTPException, Query
-from sqlalchemy import or_, select
+from sqlalchemy import func, or_, select
 from sqlalchemy.orm import selectinload
 
 from .database import SessionLocal
-from .models import Disaster, MissingPerson
+from .models import Disaster, MissingPerson, PersonCaseState
 
 router = APIRouter(prefix="/api/v1", tags=["public"])
 
@@ -65,10 +65,16 @@ def people(
     limit: int = Query(default=100, ge=1, le=250),
 ):
     with SessionLocal() as db:
-        stmt = select(MissingPerson).where(
-            MissingPerson.published.is_(True),
-            MissingPerson.archived.is_(False),
-        ).order_by(MissingPerson.created_at.desc())
+        stmt = (
+            select(MissingPerson)
+            .outerjoin(PersonCaseState, PersonCaseState.person_id == MissingPerson.id)
+            .where(
+                MissingPerson.published.is_(True),
+                MissingPerson.archived.is_(False),
+                func.coalesce(PersonCaseState.status, "missing") == "missing",
+            )
+            .order_by(MissingPerson.created_at.desc())
+        )
         if disaster_id:
             stmt = stmt.where(MissingPerson.disaster_id == disaster_id)
         if q.strip():
