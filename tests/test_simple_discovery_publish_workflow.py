@@ -76,6 +76,13 @@ def test_batch_save_and_publish_puts_people_on_public_hub(admin_client):
     public = admin_client.get("/?q=Rajesh")
     assert "Rajesh Shrestha" in public.text
 
+    duplicate_check = admin_client.get(
+        "/admin/discovery/1/duplicate-check",
+        params={"name": "Rajesh Shrestha"},
+    )
+    assert duplicate_check.status_code == 200
+    assert duplicate_check.json()["people"] == []
+
 
 def test_removed_person_is_not_submitted_when_payload_contains_only_kept_people(admin_client):
     create_event(admin_client)

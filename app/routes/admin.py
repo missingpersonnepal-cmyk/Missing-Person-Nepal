@@ -1664,6 +1664,9 @@ def discovery_candidate_duplicate_check(
                     Source.url == candidate.url,
                 )
             ) is not None
+            if has_source:
+                # Do not warn about the case created from this same source.
+                continue
             people.append(
                 {
                     "id": person.id,
@@ -1808,6 +1811,15 @@ async def discovery_candidate_review(
             candidate.disaster_id,
             str(prefill.get("name") or ""),
         )
+        exact_duplicates = [
+            person for person in exact_duplicates
+            if db.scalar(
+                select(Source.id).where(
+                    Source.person_id == person.id,
+                    Source.url == candidate.url,
+                )
+            ) is None
+        ]
         pending_duplicates = _pending_name_matches(
             db,
             candidate.disaster_id,
