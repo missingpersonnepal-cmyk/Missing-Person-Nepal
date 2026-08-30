@@ -70,7 +70,7 @@ A social post is a **source**, not the person record itself. One source post may
 - Python 3.12+
 - FastAPI
 - SQLAlchemy 2
-- PostgreSQL / Aiven PostgreSQL
+- PostgreSQL / Supabase PostgreSQL
 - Jinja2 + plain HTML/CSS
 - Alembic
 - openpyxl
@@ -278,3 +278,8 @@ V0 is an operational proof of concept, not yet a national production service.
 - `docs/DATA_MODEL.md`
 - `docs/BOT.md`
 - `docs/OPERATIONS.md`
+- `docs/SERVICE_CATALOG.md`
+- `docs/USER_MANUAL.md`
+- `docs/SEARCH_AND_DISCOVERY.md`
+- `docs/ADMIN_AND_HANDOVER.md`
+- `docs/TROUBLESHOOTING.md`

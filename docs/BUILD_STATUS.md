@@ -4,7 +4,7 @@
 
 - FastAPI backend: implemented.
 - Server-rendered public/admin frontend: implemented.
-- Aiven/PostgreSQL-ready SQLAlchemy + Alembic layer: implemented.
+- Supabase PostgreSQL-ready SQLAlchemy/psycopg + Alembic layer: implemented.
 - Public/direct missing-person intake: implemented.
 - Admin review and publication: implemented.
 - Multi-source master person records: implemented.
@@ -20,13 +20,8 @@
 
 ## Automated verification
 
-The current working build passes 25 automated tests, a clean Alembic migration smoke test, and Python compile checks. A live HTTP smoke test confirms `/health` and the server-rendered homepage respond correctly.
+The project includes automated workflow, privacy, discovery, duplicate, database-readiness, export, image, and end-to-end tests. Run `pytest` for the authoritative current count. Health endpoints are `/health` and `/ready`.
 
-## External connection blockers
+## Current integration status
 
-The application code is complete enough for V0 review, but two external connections are required before repository/database integration can be finalized:
-
-1. GitHub repository metadata reports collaborator push permission, but the connected GitHub integration currently returns HTTP 403 for repository-content writes. No workaround/fork is used.
-2. The Aiven connector currently cannot connect to the account, so no production/shared PostgreSQL schema has been modified.
-
-Until those connections are fixed, the tested build is preserved as a portable project archive and remains database-credential-free.
+The repository is connected to GitHub and application changes are pushed through the normal Git workflow. Shared persistence uses Supabase PostgreSQL through server-side `DATABASE_URL`. Secrets remain environment-only. Automated tests use isolated SQLite databases and do not mutate Supabase.

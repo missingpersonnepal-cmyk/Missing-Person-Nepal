@@ -100,6 +100,16 @@ new → reviewed → submission review → attach existing / create new master c
 
 A single candidate post may describe multiple missing people. Admins may extract more than one submission from the same candidate URL if required. The candidate remains reviewable after each extraction so a public list post can feed several unique master cases while retaining the same original source URL.
 
+## Current operational queues
+
+- `new` / `needs_ai`: To Review triage.
+- `relevant`: confirmed source, ready for one-click AI Prefill.
+- `possible_duplicate`: an explicitly detected name exactly matched a published case; compare and attach or restore.
+- `irrelevant` / `rejected`: excluded source archive.
+- `reviewed`: all people in the source have been handled.
+
+A source can mention multiple people and remains Relevant until each explicitly named person is handled. Similar names alone are not automatically isolated as duplicates.
+
 ## Future providers
 
 The bot interface can later add approved providers such as:

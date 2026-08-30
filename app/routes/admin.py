@@ -68,18 +68,16 @@ def _exact_name_matches(db, disaster_id: int, name: str) -> list[MissingPerson]:
     folded = name.strip().casefold()
     if not folded:
         return []
-    people = db.scalars(
+    return list(db.scalars(
         select(MissingPerson).where(
             MissingPerson.disaster_id == disaster_id,
             MissingPerson.archived.is_(False),
+            or_(
+                func.lower(func.trim(MissingPerson.name)) == folded,
+                func.lower(func.trim(MissingPerson.name_ne)) == folded,
+            ),
         )
-    ).all()
-    return [
-        person
-        for person in people
-        if person.name.strip().casefold() == folded
-        or (person.name_ne and person.name_ne.strip().casefold() == folded)
-    ]
+    ).all())
 
 
 def _exact_published_name_matches(
@@ -224,6 +222,27 @@ def admin_dashboard(request: Request):
             )
             or 0,
             "sources": db.scalar(select(func.count(Source.id))) or 0,
+            "to_review": db.scalar(
+                select(func.count(DiscoveryCandidate.id)).where(
+                    DiscoveryCandidate.status.in_(["new", "needs_ai"])
+                )
+            ) or 0,
+            "relevant": db.scalar(
+                select(func.count(DiscoveryCandidate.id)).where(
+                    DiscoveryCandidate.status == "relevant"
+                )
+            ) or 0,
+            "duplicates": db.scalar(
+                select(func.count(DiscoveryCandidate.id)).where(
+                    DiscoveryCandidate.status == "possible_duplicate"
+                )
+            ) or 0,
+            "unpublished": db.scalar(
+                select(func.count(MissingPerson.id)).where(
+                    MissingPerson.archived.is_(False),
+                    MissingPerson.published.is_(False),
+                )
+            ) or 0,
         }
         disasters = list(db.scalars(select(Disaster).order_by(Disaster.start_date.desc())).all())
         return render(request, "admin_dashboard.html", stats=stats, disasters=disasters)

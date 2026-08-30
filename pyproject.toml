@@ -39,4 +39,4 @@ include = ["app*"]
 exclude = ["tests*", "migrations*"]
 
 [tool.setuptools.package-data]
-app = ["templates/*.html", "static/*.css"]
+app = ["templates/*.html", "static/*"]

@@ -22,10 +22,22 @@ No additional database service is required.
 4. Run a limited bot pass.
 5. Open important generated Google searches manually.
 6. Add high-value public Facebook group/page URLs manually when discovered.
-7. Review every candidate before publication.
-8. Prefer attaching new source links to an existing master person when duplicate evidence is strong.
-9. Publish only the information needed for identification/search.
-10. Keep reporter private contact data out of public fields.
+7. Triage To Review sources, then use one-click AI Prefill only from Relevant.
+8. Resolve the Possible Duplicates queue using the linked published case.
+9. Review every extracted field before saving or publication.
+10. Prefer attaching source links to an existing person only after identity is confirmed.
+11. Publish only the information needed for identification/search.
+12. Keep reporter private contact data out of public fields.
+
+## Recommended shift procedure
+
+1. Record starting queue counts from the Admin Dashboard.
+2. Run bounded discovery and review provider warnings.
+3. Clear urgent To Review items and move valid reports to Relevant.
+4. Use AI Prefill from Relevant and verify all people named in each source.
+5. Clear Possible Duplicates and Pending Submissions.
+6. Review unpublished and resolved cases.
+7. Produce an authorized event export and record ending queue counts.
 
 ## Export workflow
 

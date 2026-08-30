@@ -117,7 +117,7 @@ def test_discovery_page_has_priority_sources_and_operator_extension_forms(admin_
     assert "Custom Search Tags / Phrases" in page.text
     assert "Add Search Tag" in page.text
     assert "Missing-Person Sharer / Group Finder" in page.text
-    assert "Add Source" in page.text
+    assert "Track Source" in page.text
     assert "Manual Add" not in page.text
     assert "Full public post text / additional context" in page.text
 

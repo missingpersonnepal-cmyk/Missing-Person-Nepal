@@ -1,12 +1,25 @@
 {% extends "base.html" %}
 {% block content %}
-<h1>Admin Dashboard</h1>
-<div class="grid">
-  <div class="card"><div class="stats">{{ stats.people }}</div>Active master records</div>
-  <div class="card"><div class="stats">{{ stats.published }}</div>Published</div>
-  <div class="card"><div class="stats">{{ stats.pending }}</div>Pending submissions</div>
-  <div class="card"><div class="stats">{{ stats.candidates }}</div>Discovery candidates</div>
-  <div class="card"><div class="stats">{{ stats.sources }}</div>Source links</div>
+<div class="page-heading">
+  <div><div class="eyebrow">Operations command center</div><h1>Admin Dashboard</h1><p class="muted">Work from left to right: triage sources, extract relevant reports, resolve duplicates, approve records, then publish.</p></div>
+  <a class="button" href="/admin/discovery">Open Discovery</a>
 </div>
-<h2>Events</h2><div class="card">{% for d in disasters %}<p><strong>{{ d.name }}</strong> — {{ d.start_date }} — {% if d.active %}Active{% else %}Inactive{% endif %}</p>{% else %}<p>No disaster event configured. <a href="/admin/events">Create one first.</a></p>{% endfor %}</div>
+<section class="workflow-board" aria-label="Recommended workflow">
+  <a class="workflow-step" href="/admin/discovery?view=review"><span class="workflow-step__number">1</span><span><strong>Triage new sources</strong><small>{{ stats.to_review }} waiting for review</small></span></a>
+  <a class="workflow-step" href="/admin/discovery?view=relevant"><span class="workflow-step__number">2</span><span><strong>Extract relevant reports</strong><small>{{ stats.relevant }} ready for AI prefill</small></span></a>
+  <a class="workflow-step" href="/admin/discovery?view=duplicates"><span class="workflow-step__number">3</span><span><strong>Resolve duplicate sources</strong><small>{{ stats.duplicates }} exact-name matches</small></span></a>
+  <a class="workflow-step" href="/admin/submissions"><span class="workflow-step__number">4</span><span><strong>Approve submissions</strong><small>{{ stats.pending }} pending decisions</small></span></a>
+  <a class="workflow-step" href="/admin/people?case_status=missing"><span class="workflow-step__number">5</span><span><strong>Publish and maintain cases</strong><small>{{ stats.unpublished }} currently unpublished</small></span></a>
+</section>
+<h2>System snapshot</h2>
+<div class="metric-grid">
+  <div class="metric-card"><span>Active records</span><strong>{{ stats.people }}</strong></div>
+  <div class="metric-card"><span>Published cases</span><strong>{{ stats.published }}</strong></div>
+  <div class="metric-card"><span>Evidence sources</span><strong>{{ stats.sources }}</strong></div>
+  <div class="metric-card"><span>New candidates</span><strong>{{ stats.candidates }}</strong></div>
+</div>
+<div class="grid dashboard-lower">
+  <section class="card"><div class="eyebrow">Active operations</div><h2>Disaster events</h2>{% for d in disasters %}<div class="event-row"><span><strong>{{ d.name }}</strong><small>{{ d.start_date }} · {{ d.disaster_type }}</small></span><span class="badge">{{ 'Active' if d.active else 'Inactive' }}</span></div>{% else %}<p>No disaster event is configured.</p><a class="button" href="/admin/events">Create the first event</a>{% endfor %}</section>
+  <section class="card"><div class="eyebrow">Shift checklist</div><h2>Before you finish</h2><ul class="checklist"><li>Review urgent and high-confidence sources first.</li><li>Attach repeat source posts to an existing published case.</li><li>Confirm public phone numbers and photos before publishing.</li><li>Move resolved cases to Found or Identified promptly.</li><li>Export an event handover file at the end of the shift.</li></ul><a href="/admin/export">Open secure exports</a></section>
+</div>
 {% endblock %}
