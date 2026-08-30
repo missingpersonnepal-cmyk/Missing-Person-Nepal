@@ -1,0 +1,26 @@
+{% extends "base.html" %}
+{% block content %}
+<h1>{{ 'Edit User' if user else 'Create User' }}</h1>
+{% if error %}<div class="error">{{ error }}</div>{% endif %}
+<form method="post" class="card">
+  {% if user %}
+  <p><strong>Username:</strong> {{ user.username }}</p>
+  {% else %}
+  <label>Username *</label><input name="username" required>
+  {% endif %}
+  <label>Display name *</label><input name="display_name" value="{{ user.display_name if user else '' }}" required>
+  <label>Email</label><input name="email" type="email" value="{{ user.email if user and user.email else '' }}">
+  <label>Role *</label>
+  <select name="role" required>
+    {% for value, label in role_labels.items() %}
+    <option value="{{ value }}" {% if user and user.role == value %}selected{% endif %}>{{ label }}</option>
+    {% endfor %}
+  </select>
+  <label><input type="checkbox" name="active" value="1" {% if not user or user.active %}checked{% endif %}> Active</label>
+  {% if not user %}
+  <label>Password *</label><input name="password" type="password" required>
+  <label>Confirm password *</label><input name="confirm_password" type="password" required>
+  {% endif %}
+  <button>{{ 'Save user' if user else 'Create user' }}</button>
+</form>
+{% endblock %}

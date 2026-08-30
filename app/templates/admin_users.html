@@ -1,0 +1,24 @@
+{% extends "base.html" %}
+{% block content %}
+<h1>Admin Users</h1>
+<p><a class="button" href="/admin/users/new">Create user</a></p>
+<div class="card">
+  <table>
+    <thead><tr><th>Username</th><th>Display name</th><th>Email</th><th>Role</th><th>Status</th><th>Last login</th><th>Created</th><th>Actions</th></tr></thead>
+    <tbody>
+      {% for user in users %}
+      <tr>
+        <td>{{ user.username }}</td>
+        <td>{{ user.display_name }}</td>
+        <td>{{ user.email or '' }}</td>
+        <td><span class="badge">{{ role_labels[user.role] }}</span></td>
+        <td><span class="badge">{{ 'Active' if user.active else 'Disabled' }}</span></td>
+        <td>{{ user.last_login_at or '' }}</td>
+        <td>{{ user.created_at }}</td>
+        <td><a href="/admin/users/{{ user.id }}/edit">Edit</a> | <a href="/admin/users/{{ user.id }}/reset-password">Reset password</a></td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+{% endblock %}

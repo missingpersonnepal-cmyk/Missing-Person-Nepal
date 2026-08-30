@@ -40,6 +40,7 @@ def upgrade() -> None:
         sa.Column("person_id", sa.Integer(), nullable=False),
         sa.Column("subscription_id", sa.Integer(), nullable=False),
         sa.Column("event_type", sa.String(length=40), nullable=False),
+        sa.Column("idempotency_key", sa.String(length=200), nullable=False),
         sa.Column("channel", sa.String(length=20), nullable=False),
         sa.Column("subject", sa.Text(), nullable=True),
         sa.Column("body", sa.Text(), nullable=False),
@@ -50,13 +51,20 @@ def upgrade() -> None:
         sa.Column("created_at", sa.DateTime(timezone=True), nullable=False),
         sa.Column("sent_at", sa.DateTime(timezone=True), nullable=True),
         sa.ForeignKeyConstraint(["person_id"], ["mp_missing_people.id"]),
-        sa.ForeignKeyConstraint(["subscription_id"], ["mp_notification_subscriptions.id"]),
+        sa.ForeignKeyConstraint(
+            ["subscription_id"], ["mp_notification_subscriptions.id"]
+        ),
         sa.PrimaryKeyConstraint("id"),
-        sa.UniqueConstraint("person_id", "subscription_id", "event_type", name="uq_mp_notification_event_delivery"),
+        sa.UniqueConstraint(
+            "subscription_id",
+            "idempotency_key",
+            name="uq_mp_notification_event_delivery",
+        ),
     )
     op.create_index("ix_mp_notification_outbox_person_id", "mp_notification_outbox", ["person_id"])
     op.create_index("ix_mp_notification_outbox_subscription_id", "mp_notification_outbox", ["subscription_id"])
     op.create_index("ix_mp_notification_outbox_event_type", "mp_notification_outbox", ["event_type"])
+    op.create_index("ix_mp_notification_outbox_idempotency_key", "mp_notification_outbox", ["idempotency_key"])
     op.create_index("ix_mp_notification_outbox_channel", "mp_notification_outbox", ["channel"])
     op.create_index("ix_mp_notification_outbox_status", "mp_notification_outbox", ["status"])
 
@@ -65,6 +73,7 @@ def downgrade() -> None:
     op.drop_index("ix_mp_notification_outbox_status", table_name="mp_notification_outbox")
     op.drop_index("ix_mp_notification_outbox_channel", table_name="mp_notification_outbox")
     op.drop_index("ix_mp_notification_outbox_event_type", table_name="mp_notification_outbox")
+    op.drop_index("ix_mp_notification_outbox_idempotency_key", table_name="mp_notification_outbox")
     op.drop_index("ix_mp_notification_outbox_subscription_id", table_name="mp_notification_outbox")
     op.drop_index("ix_mp_notification_outbox_person_id", table_name="mp_notification_outbox")
     op.drop_table("mp_notification_outbox")

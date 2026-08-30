@@ -193,22 +193,49 @@ class NotificationSubscription(Base):
 class NotificationOutbox(Base):
     __tablename__ = "mp_notification_outbox"
     __table_args__ = (
-        UniqueConstraint("person_id", "subscription_id", "event_type", name="uq_mp_notification_event_delivery"),
+        UniqueConstraint(
+            "subscription_id",
+            "idempotency_key",
+            name="uq_mp_notification_event_delivery",
+        ),
     )
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
-    person_id: Mapped[int] = mapped_column(ForeignKey("mp_missing_people.id"), index=True)
-    subscription_id: Mapped[int] = mapped_column(ForeignKey("mp_notification_subscriptions.id"), index=True)
+    person_id: Mapped[int] = mapped_column(
+        ForeignKey("mp_missing_people.id"), index=True
+    )
+    subscription_id: Mapped[int] = mapped_column(
+        ForeignKey("mp_notification_subscriptions.id"), index=True
+    )
     event_type: Mapped[str] = mapped_column(String(40), index=True)
+    idempotency_key: Mapped[str] = mapped_column(String(200))
+
+    @property
+    def dedupe_key(self) -> str:
+        """Backward-compatible alias for the event-instance idempotency key."""
+        return self.idempotency_key
+
+    @dedupe_key.setter
+    def dedupe_key(self, value: str) -> None:
+        self.idempotency_key = value
+
     channel: Mapped[str] = mapped_column(String(20), index=True)
     subject: Mapped[str | None] = mapped_column(Text, nullable=True)
     body: Mapped[str] = mapped_column(Text)
-    status: Mapped[str] = mapped_column(String(20), default="pending", index=True)
+    status: Mapped[str] = mapped_column(
+        String(20), default="pending", index=True
+    )
     attempts: Mapped[int] = mapped_column(Integer, default=0)
-    provider_message_id: Mapped[str | None] = mapped_column(Text, nullable=True)
+    provider_message_id: Mapped[str | None] = mapped_column(
+        Text, nullable=True
+    )
     last_error: Mapped[str | None] = mapped_column(Text, nullable=True)
-    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
-    sent_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=utcnow
+    )
+    sent_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
 
 
 class AdminUser(Base):
@@ -217,7 +244,12 @@ class AdminUser(Base):
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
     username: Mapped[str] = mapped_column(String(100), unique=True, index=True)
     password_hash: Mapped[str] = mapped_column(Text)
+    display_name: Mapped[str] = mapped_column(String(255), default="")
+    email: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    role: Mapped[str] = mapped_column(String(30), default="super_admin", index=True)
     active: Mapped[bool] = mapped_column(Boolean, default=True)
+    last_login_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    must_change_password: Mapped[bool] = mapped_column(Boolean, default=False)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
 
 

@@ -15,9 +15,9 @@ from ..database import SessionLocal
 from ..models import (
     AdminUser, Disaster, DiscoveryCandidate, DiscoverySearchTag,
     DiscoverySourceSeed, MissingPerson, NotificationOutbox,
-    NotificationSubscription, PersonCaseState, Source, Submission,
+    NotificationSubscription, PersonCaseState, Source, Submission, utcnow,
 )
-from ..security import verify_password
+from ..security import hash_password, verify_password
 from ..services.discovery import discover_candidates, generate_queries, google_search_url
 from ..services.wide_discovery import collect_known_source_scopes, generate_wide_queries, run_wide_discovery
 from ..services.search_providers import SearchProviderUnavailable, brave_status
@@ -59,9 +59,37 @@ from ..services.priority_sources import (
     user_source_seeds,
 )
 from ..services.share_cards import build_share_card
-from .common import admin_gate, audit, next_case_number, parse_date, parse_int, parse_time, render
+from .common import admin_gate, audit, current_admin, next_case_number, parse_date, parse_int, parse_time, render, role_gate
 
 router = APIRouter()
+
+ADMIN_ROLES = {"super_admin", "admin", "reviewer"}
+ROLE_LABELS = {"super_admin": "Super Admin", "admin": "Admin", "reviewer": "Reviewer"}
+
+
+def _normalize_admin_username(value: str) -> str:
+    return "".join(ch for ch in value.strip().casefold() if ch.isalnum() or ch in {"_", "-", "."})
+
+
+def _valid_admin_email(value: str) -> bool:
+    return not value or ("@" in value and "." in value.rsplit("@", 1)[-1])
+
+
+def _active_super_admin_count(db) -> int:
+    return db.scalar(
+        select(func.count(AdminUser.id)).where(
+            AdminUser.active.is_(True),
+            AdminUser.role == "super_admin",
+        )
+    ) or 0
+
+
+def _validate_password_pair(password: str, confirmation: str) -> str | None:
+    if password != confirmation:
+        return "Password confirmation does not match"
+    if len(password) < 10:
+        return "Password must be at least 10 characters"
+    return None
 
 
 def _normalize_gender(value) -> str | None:
@@ -249,6 +277,7 @@ async def login(request: Request):
         admin = db.scalar(select(AdminUser).where(AdminUser.username == username, AdminUser.active.is_(True)))
         if admin is None or not verify_password(password, admin.password_hash):
             return render(request, "admin_login.html", error="Invalid credentials")
+        admin.last_login_at = utcnow()
         request.session["admin"] = admin.username
         audit(db, request, "login", "admin", admin.id)
         db.commit()
@@ -259,6 +288,151 @@ async def login(request: Request):
 def logout(request: Request):
     request.session.clear()
     return RedirectResponse("/admin/login", status_code=303)
+
+
+@router.get("/admin/users", response_class=HTMLResponse)
+def admin_users(request: Request):
+    gate = role_gate(request, {"super_admin"})
+    if gate:
+        return gate
+    with SessionLocal() as db:
+        users = list(db.scalars(select(AdminUser).order_by(AdminUser.username)).all())
+        return render(request, "admin_users.html", users=users, role_labels=ROLE_LABELS)
+
+
+@router.get("/admin/users/new", response_class=HTMLResponse)
+def admin_user_new(request: Request):
+    gate = role_gate(request, {"super_admin"})
+    if gate:
+        return gate
+    return render(request, "admin_user_form.html", user=None, error=None, role_labels=ROLE_LABELS)
+
+
+@router.post("/admin/users/new", response_class=HTMLResponse)
+async def admin_user_create(request: Request):
+    gate = role_gate(request, {"super_admin"})
+    if gate:
+        return gate
+    form = await request.form()
+    username = _normalize_admin_username(str(form.get("username") or ""))
+    display_name = str(form.get("display_name") or "").strip()
+    email = str(form.get("email") or "").strip() or None
+    role = str(form.get("role") or "").strip().casefold()
+    password = str(form.get("password") or "")
+    confirm_password = str(form.get("confirm_password") or "")
+    active = str(form.get("active") or "") == "1"
+    error = _validate_password_pair(password, confirm_password)
+    if not username or not display_name:
+        error = "Username and display name are required"
+    elif role not in ADMIN_ROLES:
+        error = "Invalid role"
+    elif not _valid_admin_email(email or ""):
+        error = "Invalid email"
+    if error:
+        return render(request, "admin_user_form.html", user=None, error=error, role_labels=ROLE_LABELS)
+    with SessionLocal() as db:
+        if db.scalar(select(AdminUser.id).where(AdminUser.username == username)):
+            return render(request, "admin_user_form.html", user=None, error="Username already exists", role_labels=ROLE_LABELS)
+        user = AdminUser(
+            username=username,
+            display_name=display_name,
+            email=email,
+            role=role,
+            active=active,
+            password_hash=hash_password(password),
+        )
+        db.add(user)
+        db.flush()
+        audit(db, request, "admin_user_created", "admin", user.id, f"role={role}; active={active}")
+        db.commit()
+    return RedirectResponse("/admin/users", status_code=303)
+
+
+@router.get("/admin/users/{user_id}/edit", response_class=HTMLResponse)
+def admin_user_edit_page(request: Request, user_id: int):
+    gate = role_gate(request, {"super_admin"})
+    if gate:
+        return gate
+    with SessionLocal() as db:
+        user = db.get(AdminUser, user_id)
+        if user is None:
+            return HTMLResponse("Not found", status_code=404)
+        return render(request, "admin_user_form.html", user=user, error=None, role_labels=ROLE_LABELS)
+
+
+@router.post("/admin/users/{user_id}/edit", response_class=HTMLResponse)
+async def admin_user_edit(request: Request, user_id: int):
+    gate = role_gate(request, {"super_admin"})
+    if gate:
+        return gate
+    form = await request.form()
+    display_name = str(form.get("display_name") or "").strip()
+    email = str(form.get("email") or "").strip() or None
+    role = str(form.get("role") or "").strip().casefold()
+    active = str(form.get("active") or "") == "1"
+    if not display_name or role not in ADMIN_ROLES or not _valid_admin_email(email or ""):
+        with SessionLocal() as db:
+            user = db.get(AdminUser, user_id)
+            return render(request, "admin_user_form.html", user=user, error="Invalid user details", role_labels=ROLE_LABELS)
+    with SessionLocal() as db:
+        user = db.get(AdminUser, user_id)
+        actor = current_admin(db, request)
+        if user is None or actor is None:
+            return HTMLResponse("Not found", status_code=404)
+        final_super = user.role == "super_admin" and _active_super_admin_count(db) <= 1
+        if final_super and (role != "super_admin" or not active):
+            return HTMLResponse("Cannot disable or demote the final active Super Admin", status_code=409)
+        if user.id == actor.id and not active:
+            return HTMLResponse("Cannot disable your own active account", status_code=409)
+        old_role = user.role
+        old_active = user.active
+        user.display_name = display_name
+        user.email = email
+        user.role = role
+        user.active = active
+        if old_role != role:
+            audit(db, request, "admin_role_changed", "admin", user.id, f"{old_role}->{role}")
+        if old_active and not active:
+            audit(db, request, "admin_user_disabled", "admin", user.id)
+        elif not old_active and active:
+            audit(db, request, "admin_user_reactivated", "admin", user.id)
+        audit(db, request, "admin_user_updated", "admin", user.id)
+        db.commit()
+    return RedirectResponse("/admin/users", status_code=303)
+
+
+@router.get("/admin/users/{user_id}/reset-password", response_class=HTMLResponse)
+def admin_user_reset_password_page(request: Request, user_id: int):
+    gate = role_gate(request, {"super_admin"})
+    if gate:
+        return gate
+    with SessionLocal() as db:
+        user = db.get(AdminUser, user_id)
+        if user is None:
+            return HTMLResponse("Not found", status_code=404)
+        return render(request, "admin_user_reset_password.html", user=user, error=None)
+
+
+@router.post("/admin/users/{user_id}/reset-password", response_class=HTMLResponse)
+async def admin_user_reset_password(request: Request, user_id: int):
+    gate = role_gate(request, {"super_admin"})
+    if gate:
+        return gate
+    form = await request.form()
+    password = str(form.get("password") or "")
+    confirm_password = str(form.get("confirm_password") or "")
+    error = _validate_password_pair(password, confirm_password)
+    with SessionLocal() as db:
+        user = db.get(AdminUser, user_id)
+        if user is None:
+            return HTMLResponse("Not found", status_code=404)
+        if error:
+            return render(request, "admin_user_reset_password.html", user=user, error=error)
+        user.password_hash = hash_password(password)
+        user.must_change_password = str(form.get("must_change_password") or "") == "1"
+        audit(db, request, "admin_password_reset", "admin", user.id)
+        db.commit()
+    return RedirectResponse("/admin/users", status_code=303)
 
 
 @router.get("/admin", response_class=HTMLResponse)

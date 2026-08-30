@@ -1,9 +1,11 @@
 from __future__ import annotations
 
+from hashlib import sha256
+
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
-from ...models import MissingPerson, NotificationOutbox, NotificationSubscription, utcnow
+from ...models import MissingPerson, NotificationOutbox, NotificationSubscription, PersonCaseState, utcnow
 from .email import get_email_provider
 from .messages import CASE_UPDATED, FOUND_ALIVE, IDENTIFIED_DECEASED, render_message
 from .sms import get_sms_provider
@@ -45,15 +47,65 @@ def add_subscription(db: Session, person_id: int, channel: str, destination: str
     return row
 
 
+def notification_event_key(person: MissingPerson, event_type: str, event_instance: str | None = None) -> str:
+    if event_instance:
+        return f"person:{person.id}:{event_type}:{event_instance}"
+    if event_type in {FOUND_ALIVE, IDENTIFIED_DECEASED}:
+        return f"person:{person.id}:status:{event_type}"
+    return f"person:{person.id}:{event_type}:{utcnow().isoformat()}"
+
+
 def enqueue_case_notifications(
     db: Session,
     person: MissingPerson,
     event_type: str,
     *,
     update_note: str | None = None,
+    idempotency_key: str | None = None,
+    event_instance: str | None = None,
 ) -> int:
+    """Enqueue one delivery per active subscription for one event instance.
+
+    Reprocessing the same business event may reuse an explicit
+    ``idempotency_key``. Without one, a stable key is derived from the current
+    case/version state so retries of the same event deduplicate while later
+    case updates or later status transitions get a different event instance.
+    """
     if event_type not in EVENT_TYPES:
         raise ValueError("Invalid notification event")
+
+    explicit_key = str(idempotency_key or "").strip()
+    instance_key = str(event_instance or "").strip()
+
+    if explicit_key and instance_key and explicit_key != instance_key:
+        raise ValueError(
+            "idempotency_key and event_instance must match when both are provided"
+        )
+
+    raw_key = explicit_key or instance_key
+    if raw_key:
+        event_key = f"{event_type}:{raw_key}"
+    elif event_type == CASE_UPDATED:
+        version = person.updated_at or person.created_at
+        version_text = version.isoformat() if version else str(person.id)
+        material = (
+            f"{person.id}|{event_type}|{version_text}|"
+            f"{str(update_note or '').strip()}"
+        )
+        event_key = f"{event_type}:{sha256(material.encode('utf-8')).hexdigest()}"
+    else:
+        state = db.get(PersonCaseState, person.id)
+        version = (
+            state.updated_at if state is not None else
+            person.updated_at or person.created_at
+        )
+        version_text = version.isoformat() if version else str(person.id)
+        state_status = state.status if state is not None else "unknown"
+        material = f"{person.id}|{event_type}|{state_status}|{version_text}"
+        event_key = f"{event_type}:{sha256(material.encode('utf-8')).hexdigest()}"
+    if len(event_key) > 200:
+        raise ValueError("Notification idempotency key is too long")
+
     subscriptions = db.scalars(
         select(NotificationSubscription).where(
             NotificationSubscription.person_id == person.id,
@@ -62,12 +114,16 @@ def enqueue_case_notifications(
     ).all()
     created = 0
     for subscription in subscriptions:
-        message = render_message(person, event_type, subscription.channel, update_note=update_note)
+        message = render_message(
+            person,
+            event_type,
+            subscription.channel,
+            update_note=update_note,
+        )
         exists = db.scalar(
             select(NotificationOutbox.id).where(
-                NotificationOutbox.person_id == person.id,
                 NotificationOutbox.subscription_id == subscription.id,
-                NotificationOutbox.event_type == event_type,
+                NotificationOutbox.idempotency_key == event_key,
             )
         )
         if exists:
@@ -77,6 +133,7 @@ def enqueue_case_notifications(
                 person_id=person.id,
                 subscription_id=subscription.id,
                 event_type=event_type,
+                idempotency_key=event_key,
                 channel=subscription.channel,
                 subject=message.subject,
                 body=message.body,

@@ -3,7 +3,7 @@ from uuid import uuid4
 
 from app.database import SessionLocal
 from app.models import Disaster, MissingPerson, NotificationOutbox, NotificationSubscription, PersonCaseState
-from app.services.notifications import add_subscription, drain_pending_notifications, mask_destination
+from app.services.notifications import add_subscription, drain_pending_notifications, enqueue_case_notifications, mask_destination
 from app.services.notifications.messages import CASE_UPDATED, IDENTIFIED_DECEASED
 
 
@@ -126,3 +126,101 @@ def test_identified_and_case_update_wording_is_neutral(admin_client):
 def test_mask_destination_fallbacks():
     assert mask_destination("9841234591", "sms") == "98******91"
     assert mask_destination("user@example.com", "email") == "u***@example.com"
+
+
+def test_case_updates_use_event_instance_dedupe_keys(admin_client):
+    person_id, _case_number = create_person()
+    with SessionLocal() as db:
+        add_subscription(db, person_id, "sms", "9841234591")
+        person = db.get(MissingPerson, person_id)
+        assert enqueue_case_notifications(db, person, CASE_UPDATED, event_instance="update-1") == 1
+        assert enqueue_case_notifications(db, person, CASE_UPDATED, event_instance="update-1") == 0
+        assert enqueue_case_notifications(db, person, CASE_UPDATED, event_instance="update-2") == 1
+        db.commit()
+
+    with SessionLocal() as db:
+        rows = db.query(NotificationOutbox).filter_by(event_type=CASE_UPDATED).all()
+        assert len(rows) == 2
+        assert len({row.dedupe_key for row in rows}) == 2
+
+
+def test_idempotency_key_deduplicates_same_event_but_allows_later_updates():
+    person_id, _case_number = create_person()
+    with SessionLocal() as db:
+        add_subscription(db, person_id, "sms", "9841234591")
+        db.commit()
+
+    with SessionLocal() as db:
+        person = db.get(MissingPerson, person_id)
+        assert person is not None
+
+        first = enqueue_case_notifications(
+            db,
+            person,
+            CASE_UPDATED,
+            update_note="First meaningful update",
+            idempotency_key="case-update-001",
+        )
+        duplicate = enqueue_case_notifications(
+            db,
+            person,
+            CASE_UPDATED,
+            update_note="First meaningful update",
+            idempotency_key="case-update-001",
+        )
+        later = enqueue_case_notifications(
+            db,
+            person,
+            CASE_UPDATED,
+            update_note="Later meaningful update",
+            idempotency_key="case-update-002",
+        )
+        db.commit()
+
+        rows = (
+            db.query(NotificationOutbox)
+            .filter_by(person_id=person_id, event_type=CASE_UPDATED)
+            .order_by(NotificationOutbox.id)
+            .all()
+        )
+        assert first == 1
+        assert duplicate == 0
+        assert later == 1
+        assert len(rows) == 2
+        assert rows[0].idempotency_key == "CASE_UPDATED:case-update-001"
+        assert rows[1].idempotency_key == "CASE_UPDATED:case-update-002"
+
+
+def test_same_raw_key_is_namespaced_by_event_type():
+    person_id, _case_number = create_person()
+    with SessionLocal() as db:
+        add_subscription(db, person_id, "email", "user@example.com")
+        db.commit()
+
+    with SessionLocal() as db:
+        person = db.get(MissingPerson, person_id)
+        assert person is not None
+
+        assert enqueue_case_notifications(
+            db,
+            person,
+            CASE_UPDATED,
+            idempotency_key="event-001",
+        ) == 1
+        assert enqueue_case_notifications(
+            db,
+            person,
+            IDENTIFIED_DECEASED,
+            idempotency_key="event-001",
+        ) == 1
+        db.commit()
+
+        rows = db.query(NotificationOutbox).filter_by(
+            person_id=person_id,
+        ).all()
+        assert len(rows) == 2
+        assert {row.idempotency_key for row in rows} == {
+            "CASE_UPDATED:event-001",
+            "IDENTIFIED_DECEASED:event-001",
+        }
+

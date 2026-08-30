@@ -26,6 +26,7 @@
     <a href="/admin/submissions">Submissions</a>
     <a href="/admin/discovery">Discovery Bot</a>
     <a href="/admin/export">Export</a>
+    {% if admin_role == 'super_admin' %}<a href="/admin/users">Users</a>{% endif %}
     <form method="post" action="/admin/logout" style="display:inline"><button class="secondary" type="submit">Logout</button></form>
   </div>
   {% endif %}

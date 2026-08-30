@@ -26,7 +26,14 @@ def seed_admin() -> None:
     with SessionLocal() as db:
         existing = db.scalar(select(AdminUser).where(AdminUser.username == settings.admin_username))
         if existing is None:
-            db.add(AdminUser(username=settings.admin_username, password_hash=hash_password(settings.admin_password)))
+            db.add(
+                AdminUser(
+                    username=settings.admin_username,
+                    password_hash=hash_password(settings.admin_password),
+                    display_name=settings.admin_username,
+                    role="super_admin",
+                )
+            )
             db.commit()
 
 
