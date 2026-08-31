@@ -31,6 +31,8 @@ class Settings:
     email_provider: str = os.getenv("EMAIL_PROVIDER", "disabled").strip().casefold()
     sms_from: str = os.getenv("SMS_FROM", "")
     email_from: str = os.getenv("EMAIL_FROM", "")
+    geo_api_base_url: str = os.getenv("GEO_API_BASE_URL", "https://merogeo.com").rstrip("/")
+    geo_api_key: str = os.getenv("GEO_API_KEY", "")
     port: int = int(os.getenv("PORT", "8000"))
 
 

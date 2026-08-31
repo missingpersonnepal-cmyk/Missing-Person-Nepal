@@ -18,6 +18,9 @@
     <h2>{{ p.name }}</h2>
     {% if p.name_ne %}<div>{{ p.name_ne }}</div>{% endif %}
     <p><strong>Case:</strong> {{ p.case_number }}<br><strong>Age:</strong> {{ p.age or 'Unknown' }}<br><strong>Last seen:</strong> {{ p.last_seen_location }}{% if p.last_seen_date %}<br><strong>Date:</strong> {{ p.last_seen_date }}{% endif %}</p>
+    {% if p.last_seen_lat and p.last_seen_lon %}
+    <p><a class="button secondary" href="https://www.google.com/maps?q={{ p.last_seen_lat }},{{ p.last_seen_lon }}" target="_blank" rel="noopener noreferrer">Open location map</a></p>
+    {% endif %}
     <a class="button" href="/person/{{ p.case_number }}">View details</a>
     {% if admin_username %}
     <div class="inline" style="gap:8px; flex-wrap:wrap; margin-top:10px">

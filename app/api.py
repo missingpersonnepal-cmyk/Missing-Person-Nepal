@@ -22,6 +22,8 @@ def person_payload(person: MissingPerson, include_sources: bool = False) -> dict
         "last_seen_date": person.last_seen_date.isoformat() if person.last_seen_date else None,
         "last_seen_time": person.last_seen_time.isoformat(timespec="minutes") if person.last_seen_time else None,
         "last_seen_location": person.last_seen_location,
+        "last_seen_lat": person.last_seen_lat,
+        "last_seen_lon": person.last_seen_lon,
         "clothing": person.clothing,
         "identification_details": person.identification_details,
         "public_contact_number": person.public_contact_number,
@@ -52,6 +54,8 @@ def events():
                 "disaster_type": d.disaster_type,
                 "start_date": d.start_date.isoformat(),
                 "affected_locations": d.locations(),
+                "center_lat": d.center_lat,
+                "center_lon": d.center_lon,
                 "active": d.active,
             }
             for d in rows

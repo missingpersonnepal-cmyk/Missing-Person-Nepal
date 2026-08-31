@@ -31,6 +31,8 @@ services:
         value: disabled
       - key: EMAIL_PROVIDER
         value: disabled
+      - key: GEO_API_BASE_URL
+        value: https://merogeo.com
       - key: SESSION_SECRET
         sync: false
       - key: ADMIN_USERNAME
@@ -38,6 +40,8 @@ services:
       - key: ADMIN_PASSWORD
         sync: false
       - key: DATABASE_URL
+        sync: false
+      - key: GEO_API_KEY
         sync: false
       - key: PUBLIC_BASE_URL
         sync: false

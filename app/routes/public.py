@@ -10,11 +10,17 @@ from sqlalchemy.orm import selectinload
 from ..config import settings
 from ..database import SessionLocal
 from ..models import Disaster, MissingPerson, PersonCaseState, Submission
+from ..services.geo import parse_coords, geocode
 from ..services.files import save_image
 from ..services.normalization import canonicalize_url
 from .common import parse_date, parse_int, parse_time, render
 
 router = APIRouter()
+
+
+def _geo_point_for_text(text: str):
+    point = parse_coords(text)
+    return point or geocode(text)
 
 
 @router.get("/media/person/{case_number}")
@@ -139,6 +145,7 @@ async def submit_report(request: Request):
             photo_path = await save_image(form.get("photo"), settings.upload_dir)
         except ValueError as exc:
             return render(request, "report.html", disasters=disasters, error=str(exc), success=None)
+        point = _geo_point_for_text(last_seen_location)
 
         social_url = canonicalize_url(str(form.get("social_url") or "")) or None
         submission = Submission(
@@ -153,6 +160,8 @@ async def submit_report(request: Request):
             last_seen_date=parse_date(form.get("last_seen_date")),
             last_seen_time=parse_time(form.get("last_seen_time")),
             last_seen_location=last_seen_location,
+            last_seen_lat=point.lat if point else None,
+            last_seen_lon=point.lon if point else None,
             clothing=str(form.get("clothing") or "").strip() or None,
             identification_details=str(form.get("identification_details") or "").strip() or None,
             public_contact_number=str(form.get("public_contact_number") or "").strip() or None,

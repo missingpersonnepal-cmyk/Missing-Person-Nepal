@@ -7,6 +7,9 @@
   <p><strong>Case:</strong> {{ person.case_number }}</p>
   <p><strong>Age:</strong> {{ person.age or 'Unknown' }} &nbsp; <strong>Gender:</strong> {{ person.gender or 'Not provided' }}</p>
   <p><strong>Last seen:</strong> {{ person.last_seen_location }}</p>
+  {% if person.last_seen_lat and person.last_seen_lon %}
+  <p><a class="button secondary" href="https://www.google.com/maps?q={{ person.last_seen_lat }},{{ person.last_seen_lon }}" target="_blank" rel="noopener noreferrer">Open last-seen map</a></p>
+  {% endif %}
   <p><strong>Date/time:</strong> {{ person.last_seen_date or 'Unknown' }} {{ person.last_seen_time or '' }}</p>
   {% if person.clothing %}<p><strong>Clothing:</strong> {{ person.clothing }}</p>{% endif %}
   {% if person.identification_details %}<p><strong>Identification details:</strong> {{ person.identification_details }}</p>{% endif %}

@@ -37,6 +37,7 @@ from ..services.master_records import apply_submission_to_master
 from ..services.duplicates import find_duplicates
 from ..services.exports import build_csv, build_xlsx
 from ..services.files import save_image
+from ..services.geo import GeoPoint, geocode, parse_coords
 from ..services.source_images import discover_public_post_image, discover_public_post_text, download_public_source_image, is_allowed_public_image_url
 from ..services.source_ocr import extract_ocr_text, ocr_available
 from ..services.notifications import (
@@ -241,6 +242,13 @@ def _source_notes_for_candidate(
     if ocr_text:
         parts.append("OCR text from reviewed source image:\n" + ocr_text[:12_000])
     return "\n\n".join(item.strip() for item in parts if item.strip()) or None
+
+
+def _geo_point_for_text(text: str) -> GeoPoint | None:
+    point = parse_coords(text)
+    if point:
+        return point
+    return geocode(text)
 
 
 @router.get("/admin/media/{filename}")
@@ -531,12 +539,16 @@ async def admin_event_create(request: Request):
     if not code or not name or not start_date:
         return RedirectResponse("/admin/events", status_code=303)
     with SessionLocal() as db:
+        affected_locations = str(form.get("affected_locations") or "").strip()
+        center = _geo_point_for_text(affected_locations.splitlines()[0].strip()) if affected_locations else None
         disaster = Disaster(
             code=code,
             name=name,
             disaster_type=str(form.get("disaster_type") or "flood").strip(),
             start_date=start_date,
-            affected_locations=str(form.get("affected_locations") or "").strip(),
+            affected_locations=affected_locations,
+            center_lat=center.lat if center else None,
+            center_lon=center.lon if center else None,
             active=True,
         )
         db.add(disaster)
@@ -559,9 +571,13 @@ async def admin_event_update(request: Request, disaster_id: int):
         disaster = db.get(Disaster, disaster_id)
         if disaster is None:
             return HTMLResponse("Not found", status_code=404)
+        affected_locations = str(form.get("affected_locations") or "").strip()
+        center = _geo_point_for_text(affected_locations.splitlines()[0].strip()) if affected_locations else None
         disaster.name = str(form.get("name") or disaster.name).strip()
         disaster.disaster_type = str(form.get("disaster_type") or disaster.disaster_type).strip()
-        disaster.affected_locations = str(form.get("affected_locations") or "").strip()
+        disaster.affected_locations = affected_locations
+        disaster.center_lat = center.lat if center else None
+        disaster.center_lon = center.lon if center else None
         disaster.active = str(form.get("active") or "") == "on"
         audit(db, request, "update_event", "disaster", disaster.id, disaster.name)
         db.commit()
@@ -698,7 +714,11 @@ async def admin_person_edit(request: Request, person_id: int):
         person.gender = _normalize_gender(form.get("gender"))
         person.last_seen_date = parse_date(form.get("last_seen_date"))
         person.last_seen_time = parse_time(form.get("last_seen_time"))
-        person.last_seen_location = str(form.get("last_seen_location") or "").strip()
+        last_seen_location = str(form.get("last_seen_location") or "").strip()
+        person.last_seen_location = last_seen_location
+        point = _geo_point_for_text(last_seen_location) if last_seen_location else None
+        person.last_seen_lat = point.lat if point else None
+        person.last_seen_lon = point.lon if point else None
         person.clothing = str(form.get("clothing") or "").strip() or None
         person.identification_details = str(form.get("identification_details") or "").strip() or None
         person.public_contact_number = str(form.get("public_contact_number") or "").strip() or None
@@ -2682,6 +2702,7 @@ async def discovery_to_submission(request: Request, candidate_id: int):
             disaster = db.get(Disaster, candidate.disaster_id)
             if disaster is None:
                 return HTMLResponse("Unknown disaster", status_code=404)
+            point = _geo_point_for_text(location) if location else None
             person = MissingPerson(
                 case_number=next_case_number(db, disaster),
                 disaster_id=candidate.disaster_id,
@@ -2693,6 +2714,8 @@ async def discovery_to_submission(request: Request, candidate_id: int):
                 last_seen_date=parse_date(form.get("last_seen_date")),
                 last_seen_time=parse_time(form.get("last_seen_time")),
                 last_seen_location=location,
+                last_seen_lat=point.lat if point else None,
+                last_seen_lon=point.lon if point else None,
                 clothing=str(form.get("clothing") or "").strip() or None,
                 identification_details=str(form.get("identification_details") or "").strip() or None,
                 public_contact_number=str(form.get("public_contact_number") or "").strip() or None,
@@ -2727,6 +2750,7 @@ async def discovery_to_submission(request: Request, candidate_id: int):
                 )
             return RedirectResponse(_next_discovery_review_url(db, candidate, "Review queue complete."), status_code=303)
 
+        point = _geo_point_for_text(location) if location else None
         sub = Submission(
             disaster_id=candidate.disaster_id,
             kind="missing_report",
@@ -2738,6 +2762,8 @@ async def discovery_to_submission(request: Request, candidate_id: int):
             last_seen_date=parse_date(form.get("last_seen_date")),
             last_seen_time=parse_time(form.get("last_seen_time")),
             last_seen_location=location,
+            last_seen_lat=point.lat if point else None,
+            last_seen_lon=point.lon if point else None,
             clothing=str(form.get("clothing") or "").strip() or None,
             identification_details=str(form.get("identification_details") or "").strip() or None,
             public_contact_number=str(form.get("public_contact_number") or "").strip() or None,

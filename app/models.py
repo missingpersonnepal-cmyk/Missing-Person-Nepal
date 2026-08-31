@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from datetime import date, datetime, time, timezone
 
-from sqlalchemy import Boolean, Date, DateTime, ForeignKey, Integer, String, Text, Time, UniqueConstraint
+from sqlalchemy import Boolean, Date, DateTime, Float, ForeignKey, Integer, String, Text, Time, UniqueConstraint
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from .database import Base
@@ -21,6 +21,8 @@ class Disaster(Base):
     disaster_type: Mapped[str] = mapped_column(String(50), default="flood")
     start_date: Mapped[date] = mapped_column(Date)
     affected_locations: Mapped[str] = mapped_column(Text, default="")
+    center_lat: Mapped[float | None] = mapped_column(Float, nullable=True)
+    center_lon: Mapped[float | None] = mapped_column(Float, nullable=True)
     active: Mapped[bool] = mapped_column(Boolean, default=True, index=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
 
@@ -42,6 +44,8 @@ class MissingPerson(Base):
     age: Mapped[int | None] = mapped_column(Integer, nullable=True)
     gender: Mapped[str | None] = mapped_column(String(30), nullable=True)
     photo_path: Mapped[str | None] = mapped_column(Text, nullable=True)
+    last_seen_lat: Mapped[float | None] = mapped_column(Float, nullable=True)
+    last_seen_lon: Mapped[float | None] = mapped_column(Float, nullable=True)
 
     residential_address_private: Mapped[str | None] = mapped_column(Text, nullable=True)
     last_seen_date: Mapped[date | None] = mapped_column(Date, nullable=True, index=True)
@@ -95,6 +99,8 @@ class Submission(Base):
     last_seen_date: Mapped[date | None] = mapped_column(Date, nullable=True)
     last_seen_time: Mapped[time | None] = mapped_column(Time, nullable=True)
     last_seen_location: Mapped[str | None] = mapped_column(Text, nullable=True)
+    last_seen_lat: Mapped[float | None] = mapped_column(Float, nullable=True)
+    last_seen_lon: Mapped[float | None] = mapped_column(Float, nullable=True)
     clothing: Mapped[str | None] = mapped_column(Text, nullable=True)
     identification_details: Mapped[str | None] = mapped_column(Text, nullable=True)
     public_contact_number: Mapped[str | None] = mapped_column(String(80), nullable=True)
