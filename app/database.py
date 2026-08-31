@@ -20,6 +20,8 @@ def _normalize_database_url(database_url: str) -> str:
 
 
 database_url = _normalize_database_url(settings.database_url)
+if settings.app_env.strip().casefold() == "production" and database_url.startswith("sqlite"):
+    raise RuntimeError("DATABASE_URL must point to PostgreSQL when APP_ENV=production")
 connect_args = {"check_same_thread": False} if database_url.startswith("sqlite") else {}
 engine = create_engine(database_url, future=True, pool_pre_ping=True, connect_args=connect_args)
 SessionLocal = sessionmaker(bind=engine, autoflush=False, autocommit=False, expire_on_commit=False, class_=Session)

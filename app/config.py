@@ -13,7 +13,7 @@ def _as_bool(value: str | None, default: bool = False) -> bool:
 
 @dataclass(frozen=True)
 class Settings:
-    database_url: str = os.getenv("DATABASE_URL", "sqlite:///./missing_person_dev.db")
+    database_url: str = os.getenv("DATABASE_URL", "")
     session_secret: str = os.getenv("SESSION_SECRET", "local-dev-only-change-me")
     admin_username: str = os.getenv("ADMIN_USERNAME", "admin")
     admin_password: str = os.getenv("ADMIN_PASSWORD", "")
@@ -31,8 +31,13 @@ class Settings:
     email_provider: str = os.getenv("EMAIL_PROVIDER", "disabled").strip().casefold()
     sms_from: str = os.getenv("SMS_FROM", "")
     email_from: str = os.getenv("EMAIL_FROM", "")
+    port: int = int(os.getenv("PORT", "8000"))
 
 
 settings = Settings()
+
+if settings.app_env.strip().casefold() == "production" and not settings.database_url.strip():
+    raise RuntimeError("DATABASE_URL is required when APP_ENV=production")
+
 settings.upload_dir.mkdir(parents=True, exist_ok=True)
 settings.export_dir.mkdir(parents=True, exist_ok=True)
