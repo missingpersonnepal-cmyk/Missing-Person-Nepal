@@ -503,6 +503,7 @@ def admin_dashboard(request: Request):
     gate = admin_gate(request)
     if gate:
         return gate
+    geo_backfilled = parse_int(request.query_params.get("geo_backfilled"))
     with SessionLocal() as db:
         stats = {
             "people": db.scalar(select(func.count(MissingPerson.id)).where(MissingPerson.archived.is_(False))) or 0,
@@ -569,6 +570,7 @@ def admin_dashboard(request: Request):
             disasters=disasters,
             active_disaster=active_disaster,
             map_people_json=json.dumps(map_people),
+            geo_backfilled=geo_backfilled,
         )
 
 

@@ -10,6 +10,9 @@
     <button class="secondary" type="button" id="print-map-btn">Print / Save PDF</button>
   </div>
 </div>
+{% if geo_backfilled is not none %}
+<div class="notice"><strong>Map backfill complete.</strong> Updated {{ geo_backfilled }} published case{{ '' if geo_backfilled == 1 else 's' }} with coordinates.</div>
+{% endif %}
 <section class="workflow-board" aria-label="Recommended workflow">
   <a class="workflow-step" href="/admin/discovery?view=review"><span class="workflow-step__number">1</span><span><strong>Triage new sources</strong><small>{{ stats.to_review }} waiting for review</small></span></a>
   <a class="workflow-step" href="/admin/discovery?view=relevant"><span class="workflow-step__number">2</span><span><strong>Extract relevant reports</strong><small>{{ stats.relevant }} ready for AI prefill</small></span></a>
