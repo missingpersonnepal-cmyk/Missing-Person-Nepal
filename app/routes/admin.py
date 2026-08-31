@@ -66,8 +66,14 @@ from .common import admin_gate, audit, current_admin, next_case_number, parse_da
 router = APIRouter()
 MANUAL_DECK_PATH = Path(__file__).resolve().parents[1] / "static" / "user_manual_bilingual.pptx"
 
-ADMIN_ROLES = {"super_admin", "admin", "reviewer"}
-ROLE_LABELS = {"super_admin": "Super Admin", "admin": "Admin", "reviewer": "Reviewer"}
+ADMIN_ROLES = {"super_admin", "admin", "reviewer", "data_entry", "read_only"}
+ROLE_LABELS = {
+    "super_admin": "Super Admin",
+    "admin": "Admin",
+    "reviewer": "Reviewer",
+    "data_entry": "Data Entry",
+    "read_only": "Read Only",
+}
 
 
 def _normalize_admin_username(value: str) -> str:
@@ -971,7 +977,7 @@ async def admin_person_status(request: Request, person_id: int):
 
 @router.post("/admin/people/{person_id}/publish")
 def admin_publish(request: Request, person_id: int):
-    gate = admin_gate(request)
+    gate = role_gate(request, {"super_admin", "admin"})
     if gate:
         return gate
     with SessionLocal() as db:
@@ -985,7 +991,7 @@ def admin_publish(request: Request, person_id: int):
 
 @router.post("/admin/people/{person_id}/archive")
 def admin_archive(request: Request, person_id: int):
-    gate = admin_gate(request)
+    gate = role_gate(request, {"super_admin", "admin"})
     if gate:
         return gate
     with SessionLocal() as db:
@@ -1147,7 +1153,7 @@ def acknowledge_panic_alert(request: Request, submission_id: int):
 
 @router.post("/admin/submissions/{submission_id}/approve-new")
 async def approve_submission_new(request: Request, submission_id: int):
-    gate = admin_gate(request)
+    gate = role_gate(request, {"super_admin", "admin"})
     if gate:
         return gate
     form = await request.form()
