@@ -6,7 +6,6 @@ __pycache__/
 .pytest_cache/
 .ppt-build/
 exports/
-uploads/
 test_exports/
 test_uploads/
 *.db
