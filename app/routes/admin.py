@@ -1141,6 +1141,10 @@ def admin_submissions(request: Request):
                     location=sub.last_seen_location,
                     age=sub.age,
                     phone=sub.public_contact_number,
+                    last_seen_date=sub.last_seen_date,
+                    lat=sub.last_seen_lat,
+                    lon=sub.last_seen_lon,
+                    photo_path=sub.photo_path,
                 )
         people = list(
             db.scalars(
