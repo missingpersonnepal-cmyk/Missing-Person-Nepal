@@ -1,0 +1,35 @@
+{% extends "base.html" %}
+{% block title %}SOS Emergency Alert | Nepal Missing Persons Hub{% endblock %}
+{% block content %}
+<div class="card emergency-card">
+  <div class="eyebrow">Emergency assistance</div>
+  <h1>Send an SOS Alert</h1>
+  <p>If you are in immediate danger, call local emergency services first. This alert sends your current location to the Missing Persons Hub operations queue.</p>
+  {% if error %}<div class="error">{{ error }}</div>{% endif %}
+  {% if success %}<div class="notice">{{ success }}</div>{% endif %}
+  <form method="post" id="panic-form">
+    <input type="hidden" name="latitude" id="panic-latitude">
+    <input type="hidden" name="longitude" id="panic-longitude">
+    <input type="hidden" name="location_label" id="panic-location-label">
+    <label>Optional message</label>
+    <textarea name="message" rows="4" placeholder="Tell responders what is happening or who needs help."></textarea>
+    <p id="panic-status" class="muted">Your browser will ask for location permission.</p>
+    <button type="submit" class="panic-button" disabled>Send SOS Location</button>
+  </form>
+</div>
+<script>
+const panicForm = document.getElementById('panic-form');
+const panicStatus = document.getElementById('panic-status');
+const panicButton = panicForm.querySelector('button');
+if (navigator.geolocation) {
+  navigator.geolocation.getCurrentPosition((position) => {
+    document.getElementById('panic-latitude').value = position.coords.latitude;
+    document.getElementById('panic-longitude').value = position.coords.longitude;
+    document.getElementById('panic-location-label').value = `${position.coords.latitude.toFixed(6)}, ${position.coords.longitude.toFixed(6)}`;
+    panicStatus.textContent = 'Location ready. Press the button once to send the alert.';
+    panicButton.disabled = false;
+  }, () => { panicStatus.textContent = 'Location permission was not granted. SOS cannot be sent without coordinates.'; });
+} else { panicStatus.textContent = 'This browser does not support location services.'; }
+panicForm.addEventListener('submit', () => { panicButton.disabled = true; panicStatus.textContent = 'Sending SOS alert...'; });
+</script>
+{% endblock %}

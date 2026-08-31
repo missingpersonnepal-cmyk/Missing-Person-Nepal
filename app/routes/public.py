@@ -23,6 +23,34 @@ def _geo_point_for_text(text: str):
     return point or geocode(text)
 
 
+@router.get("/panic", response_class=HTMLResponse)
+def panic_form(request: Request):
+    return render(request, "panic.html", success=None, error=None)
+
+
+@router.post("/panic", response_class=HTMLResponse)
+async def panic_submit(request: Request):
+    form = await request.form()
+    lat = str(form.get("latitude") or "").strip()
+    lon = str(form.get("longitude") or "").strip()
+    if not parse_coords(f"{lat},{lon}"):
+        return render(request, "panic.html", success=None, error="Location permission is required to send an SOS alert.")
+    with SessionLocal() as db:
+        alert = Submission(
+            disaster_id=None,
+            kind="panic_alert",
+            status="pending",
+            name="SOS Alert",
+            last_seen_location=str(form.get("location_label") or "Emergency location").strip()[:500],
+            last_seen_lat=float(lat),
+            last_seen_lon=float(lon),
+            notes=str(form.get("message") or "").strip()[:2000] or None,
+        )
+        db.add(alert)
+        db.commit()
+        return render(request, "panic.html", success=f"SOS alert sent to the operations queue. Reference SOS-{alert.id:06d}.", error=None)
+
+
 @router.get("/media/person/{case_number}")
 def public_person_photo(case_number: str):
     """Serve only photos belonging to currently published, non-archived cases."""

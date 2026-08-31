@@ -1130,6 +1130,21 @@ def admin_submissions(request: Request):
         )
 
 
+@router.post("/admin/submissions/{submission_id}/acknowledge")
+def acknowledge_panic_alert(request: Request, submission_id: int):
+    gate = admin_gate(request)
+    if gate:
+        return gate
+    with SessionLocal() as db:
+        submission = db.get(Submission, submission_id)
+        if submission is None or submission.kind != "panic_alert":
+            return HTMLResponse("SOS alert not found", status_code=404)
+        submission.status = "reviewed"
+        audit(db, request, "acknowledge_panic_alert", "submission", submission.id)
+        db.commit()
+    return RedirectResponse("/admin/submissions", status_code=303)
+
+
 @router.post("/admin/submissions/{submission_id}/approve-new")
 async def approve_submission_new(request: Request, submission_id: int):
     gate = admin_gate(request)
@@ -2897,7 +2912,10 @@ async def discovery_to_submission(request: Request, candidate_id: int):
             disaster = db.get(Disaster, candidate.disaster_id)
             if disaster is None:
                 return HTMLResponse("Unknown disaster", status_code=404)
-            point = _geo_point_for_text(location) if location else None
+            selected_point = parse_coords(
+                f"{form.get('last_seen_lat') or ''},{form.get('last_seen_lon') or ''}"
+            )
+            point = selected_point or (_geo_point_for_text(location) if location else None)
             person = MissingPerson(
                 case_number=next_case_number(db, disaster),
                 disaster_id=candidate.disaster_id,

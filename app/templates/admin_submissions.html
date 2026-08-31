@@ -17,6 +17,12 @@
     SUB-{{ '%06d'|format(s.id) }}
     — {{ s.kind }}
   </h2>
+  {% if s.kind == 'panic_alert' %}
+  <div class="error"><strong>URGENT SOS ALERT</strong><br>
+    {% if s.last_seen_lat and s.last_seen_lon %}<a href="https://www.google.com/maps?q={{ s.last_seen_lat }},{{ s.last_seen_lon }}" target="_blank" rel="noopener noreferrer">Open reported location on map</a>{% endif %}
+    {% if s.created_at %}<br>Received: {{ s.created_at }}{% endif %}
+  </div>
+  {% endif %}
 
   {% if s.photo_path %}
   <div style="margin-bottom:16px">
@@ -175,7 +181,11 @@
   </form>
 
 
-  {% if s.kind == 'missing_report' %}
+  {% if s.kind == 'panic_alert' %}
+  <form method="post" action="/admin/submissions/{{ s.id }}/acknowledge" style="display:inline">
+    <button class="secondary">Acknowledge SOS Alert</button>
+  </form>
+  {% elif s.kind == 'missing_report' %}
 
   <p>
     <strong>Affected-area match:</strong>
@@ -214,8 +224,11 @@
   {% endif %}
 
 
-  {% if s.kind == 'missing_report' %}
-
+  {% if s.kind == 'panic_alert' %}
+  <form method="post" action="/admin/submissions/{{ s.id }}/acknowledge" style="display:inline">
+    <button class="secondary">Acknowledge SOS Alert</button>
+  </form>
+  {% elif s.kind == 'missing_report' %}
   <form
     method="post"
     action="/admin/submissions/{{ s.id }}/approve-new"
@@ -226,7 +239,9 @@
       Approve & Publish
     </button>
   </form>
+  {% endif %}
 
+  {% if s.kind == 'missing_report' %}
   <form
     method="post"
     action="/admin/submissions/{{ s.id }}/approve-new"
@@ -241,6 +256,7 @@
   {% endif %}
 
 
+  {% if s.kind == 'missing_report' %}
   <form
     method="post"
     action="/admin/submissions/{{ s.id }}/attach"
@@ -277,8 +293,9 @@
     </div>
 
   </form>
+  {% endif %}
 
-
+  {% if s.kind == 'missing_report' %}
   <form
     method="post"
     action="/admin/submissions/{{ s.id }}/reject"
@@ -291,6 +308,7 @@
       Reject
     </button>
   </form>
+  {% endif %}
 
 </div>
 
