@@ -17,5 +17,9 @@
 .image-use-panel { max-width:720px; margin-top:16px; padding:16px; border:1px solid #d8b46a; border-radius:9px; background:#fff8e8; }
 .image-choice { display:flex; align-items:flex-start; gap:9px; margin:12px 0; padding:10px; border-radius:7px; background:white; cursor:pointer; }
 .image-choice input { flex:0 0 auto; margin-top:3px; }
+.search-provider-card { border-top:4px solid var(--brand); box-shadow:var(--shadow); }
+.provider-grid { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:12px; margin-top:12px; }
+.provider-tile { padding:14px; border:1px solid var(--line); border-radius:10px; background:#fffdf8; }
+.provider-tile .badge { margin-top:8px; display:inline-flex; }
 @media (max-width:1000px) { .workflow-board { grid-template-columns:repeat(2,1fr); } .metric-grid { grid-template-columns:repeat(2,1fr); } }
-@media (max-width:560px) { .workflow-board, .metric-grid, .dashboard-lower { grid-template-columns:1fr; } }
+@media (max-width:560px) { .workflow-board, .metric-grid, .dashboard-lower, .provider-grid { grid-template-columns:1fr; } }

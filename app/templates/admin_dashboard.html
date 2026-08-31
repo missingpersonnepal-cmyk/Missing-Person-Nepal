@@ -48,10 +48,43 @@
       <div id="map-nearby-list" class="muted"></div>
     </div>
   </section>
-  <section class="card"><div class="eyebrow">Active operations</div><h2>Disaster events</h2>{% for d in disasters %}<div class="event-row"><span><strong>{{ d.name }}</strong><small>{{ d.start_date }} - {{ d.disaster_type }}</small></span><span class="badge">{{ 'Active' if d.active else 'Inactive' }}</span></div>{% else %}<p>No disaster event is configured.</p><a class="button" href="/admin/events">Create the first event</a>{% endfor %}</section>
-  <section class="card"><div class="eyebrow">Time slider</div><h2>Track reports over time</h2><p class="muted">Move the slider to show only cases created in the last N days.</p><div id="time-slider-caption"></div></section>
-  <section class="card"><div class="eyebrow">Shift checklist</div><h2>Before you finish</h2><ul class="checklist"><li>Review urgent and high-confidence sources first.</li><li>Attach repeat source posts to an existing published case.</li><li>Confirm public phone numbers and photos before publishing.</li><li>Move resolved cases to Found or Identified promptly.</li><li>Export an event handover file at the end of the shift.</li></ul><a href="/admin/export">Open secure exports</a></section>
-  <section class="card"><div class="eyebrow">Training</div><h2>How to use the system</h2><p class="muted">Open the admin help hub for a plain-language walkthrough in English and Nepali, plus a slide deck you can share during handover.</p><div class="inline"><a class="button" href="/admin/help">Open help hub</a><a class="button secondary" href="/admin/help/manual.pptx">Download PPTX</a></div></section>
+  <section class="card">
+    <div class="eyebrow">Active operations</div>
+    <h2>Disaster events</h2>
+    {% for d in disasters %}
+      <div class="event-row">
+        <span><strong>{{ d.name }}</strong><small>{{ d.start_date }} - {{ d.disaster_type }}</small></span>
+        <span class="badge">{{ 'Active' if d.active else 'Inactive' }}</span>
+      </div>
+    {% else %}
+      <p>No disaster event is configured.</p>
+      <a class="button" href="/admin/events">Create the first event</a>
+    {% endfor %}
+  </section>
+  <section class="card">
+    <div class="eyebrow">Time slider</div>
+    <h2>Track reports over time</h2>
+    <p class="muted">Move the slider to show only cases created in the last N days.</p>
+    <div id="time-slider-caption"></div>
+  </section>
+  <section class="card">
+    <div class="eyebrow">Shift checklist</div>
+    <h2>Before you finish</h2>
+    <ul class="checklist">
+      <li>Review urgent and high-confidence sources first.</li>
+      <li>Attach repeat source posts to an existing published case.</li>
+      <li>Confirm public phone numbers and photos before publishing.</li>
+      <li>Move resolved cases to Found or Identified promptly.</li>
+      <li>Export an event handover file at the end of the shift.</li>
+    </ul>
+    <a href="/admin/export">Open secure exports</a>
+  </section>
+  <section class="card">
+    <div class="eyebrow">Training</div>
+    <h2>How to use the system</h2>
+    <p class="muted">Open the admin help hub for a plain-language walkthrough in English and Nepali, plus a slide deck you can share during handover.</p>
+    <div class="inline"><a class="button" href="/admin/help">Open help hub</a><a class="button secondary" href="/admin/help/manual.pptx">Download PPTX</a></div>
+  </section>
 </div>
 
 <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
@@ -66,7 +99,7 @@
 (async function () {
   const events = await fetch('/api/v1/events').then(r => r.json());
   const activeEvent = events.find(e => e.active) || events[0] || null;
-  const peopleAll = activeEvent ? await fetch(`/api/v1/people?disaster_id=${activeEvent.id}&limit=250`).then(r => r.json()) : [];
+  const peopleAll = activeEvent ? await fetch(`/api/v1/people?disaster_id=${activeEvent.id}&status=all&limit=250`).then(r => r.json()) : [];
   const map = L.map('admin-map', { scrollWheelZoom: false });
   L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', { maxZoom: 18, attribution: '&copy; OpenStreetMap contributors' }).addTo(map);
   const clusterLayer = L.markerClusterGroup();
@@ -91,11 +124,12 @@
     filtered.forEach(person => {
       if (person.last_seen_lat == null || person.last_seen_lon == null) return;
       const ll = [person.last_seen_lat, person.last_seen_lon];
-      const marker = L.marker(ll).bindPopup(`<strong>${person.name}</strong><br>${person.case_number}<br>${person.last_seen_location || ''}<br><span class="muted">Resolving place label...</span><br><a href="/person/${person.case_number}">Open case</a>`);
+      const statusLabel = person.case_status ? person.case_status.toUpperCase() : 'UNKNOWN';
+      const marker = L.marker(ll).bindPopup(`<strong>${person.name}</strong><br>${person.case_number}<br>${statusLabel}<br>${person.last_seen_location || ''}<br><span class="muted">Resolving place label...</span><br><a href="/person/${person.case_number}">Open case</a>`);
       marker.person = person;
       markers.push(marker);
       fetch(`/admin/geo/reverse?lat=${person.last_seen_lat}&lon=${person.last_seen_lon}`).then(r => r.json()).then(data => {
-        marker.setPopupContent(`<strong>${person.name}</strong><br>${person.case_number}<br>${person.last_seen_location || ''}<br>${data.label || ''}<br><a href="/person/${person.case_number}">Open case</a>`);
+        marker.setPopupContent(`<strong>${person.name}</strong><br>${person.case_number}<br>${statusLabel}<br>${person.last_seen_location || ''}<br>${data.label || ''}<br><a href="/person/${person.case_number}">Open case</a>`);
       }).catch(() => {});
       clusterLayer.addLayer(marker);
       heatLayer.addLatLng(ll);

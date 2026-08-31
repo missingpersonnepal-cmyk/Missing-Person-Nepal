@@ -69,19 +69,19 @@ def events():
 def people(
     disaster_id: int | None = None,
     q: str = Query(default="", max_length=120),
+    status: str = Query(default="missing", max_length=20),
     limit: int = Query(default=100, ge=1, le=250),
 ):
     with SessionLocal() as db:
         stmt = (
             select(MissingPerson)
             .outerjoin(PersonCaseState, PersonCaseState.person_id == MissingPerson.id)
-            .where(
-                MissingPerson.published.is_(True),
-                MissingPerson.archived.is_(False),
-                func.coalesce(PersonCaseState.status, "missing") == "missing",
-            )
+            .where(MissingPerson.published.is_(True), MissingPerson.archived.is_(False))
             .order_by(MissingPerson.created_at.desc())
         )
+        normalized_status = (status or "missing").strip().casefold()
+        if normalized_status != "all":
+            stmt = stmt.where(func.coalesce(PersonCaseState.status, "missing") == normalized_status)
         if disaster_id:
             stmt = stmt.where(MissingPerson.disaster_id == disaster_id)
         if q.strip():

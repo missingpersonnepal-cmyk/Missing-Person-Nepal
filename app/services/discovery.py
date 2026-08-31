@@ -898,6 +898,34 @@ def is_person_specific_candidate(
     return score >= 6 and has_structured_person_evidence
 
 
+def auto_triage_candidate_status(
+    result: SearchResult,
+    disaster: Disaster,
+    platform: str,
+) -> str:
+    """Lightweight automated relevance triage for discovery ingest.
+
+    Strong person-level signals go straight to Relevant so operators can
+    focus on the best candidates first. We keep weaker evidence in the
+    review flow for a human check.
+    """
+    if platform != "facebook":
+        return "new"
+
+    if not is_person_specific_candidate(result, disaster, require_event_context=True):
+        return "new"
+
+    score, reasons = facebook_person_notice_score(result, disaster)
+
+    if score >= 8 and any(reason in reasons for reason in {"list", "missing-person-list", "contact-number", "contact-appeal", "last-seen-or-since"}):
+        return "relevant"
+
+    if score >= 6:
+        return "needs_ai"
+
+    return "new"
+
+
 FACEBOOK_SOURCE_SWEEP_MAX_SOURCES = 4
 FACEBOOK_SOURCE_SWEEP_QUERIES_PER_SOURCE = 4
 
@@ -1155,10 +1183,10 @@ def discover_candidates(
                 url=result.url,
                 title=result.title,
                 snippet=result.snippet,
+                status=auto_triage_candidate_status(result, disaster, platform),
             )
         )
 
         added += 1
 
     return added
-

@@ -95,6 +95,24 @@
   </div>
 </div>
 
+<div class="card search-provider-card">
+  <div class="eyebrow">Wide search</div>
+  <h2>Google-backed search and fallback options</h2>
+  <p class="muted">This area makes the wide search path visible even when an API key is missing. Use the provider below when available, or open the generated Google query links directly.</p>
+  <div class="provider-grid">
+    <div class="provider-tile">
+      <strong>{{ wide_provider_status.name }}</strong>
+      <div class="muted">{{ wide_provider_status.detail }}</div>
+      <div class="badge">{{ 'Enabled' if wide_provider_status.available else 'Disabled' }}</div>
+    </div>
+    <div class="provider-tile">
+      <strong>Manual fallback</strong>
+      <div class="muted">Open generated Google searches for each query and review results manually.</div>
+      <a class="button secondary" href="#generated-google-searches">Jump to Google search plan</a>
+    </div>
+  </div>
+</div>
+
 {% if platform == 'facebook' %}
 <div class="grid">
   <div class="card" id="custom-search-tags">
@@ -213,7 +231,13 @@
   {% endif %}
 
   <h3>Generated targeted searches</h3>
-  {% for query, url in queries %}<p><a href="{{ url }}" target="_blank" rel="noopener noreferrer">Search</a> · <code>{{ query }}</code></p>{% else %}<p>No queries.</p>{% endfor %}
+  <div id="generated-google-searches">
+    {% for query, url in queries %}
+      <p><a href="{{ url }}" target="_blank" rel="noopener noreferrer">Open Google</a> · <code>{{ query }}</code></p>
+    {% else %}
+      <p>No queries.</p>
+    {% endfor %}
+  </div>
 
   {% if platform == 'facebook' %}
   <h3>Wide query plan ({{ wide_query_plan|length }})</h3>
