@@ -38,7 +38,7 @@ class MissingPerson(Base):
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
     case_number: Mapped[str] = mapped_column(String(60), unique=True, index=True)
-    disaster_id: Mapped[int | None] = mapped_column(ForeignKey("mp_disasters.id"), nullable=True, index=True)
+    disaster_id: Mapped[int] = mapped_column(ForeignKey("mp_disasters.id"), index=True)
 
     name: Mapped[str] = mapped_column(String(255), index=True)
     name_ne: Mapped[str | None] = mapped_column(String(255), nullable=True, index=True)
@@ -60,6 +60,12 @@ class MissingPerson(Base):
 
     published: Mapped[bool] = mapped_column(Boolean, default=False, index=True)
     archived: Mapped[bool] = mapped_column(Boolean, default=False, index=True)
+    source_confirmed: Mapped[bool] = mapped_column(Boolean, default=False)
+    verification_confidence: Mapped[str | None] = mapped_column(String(20), nullable=True)
+    verified_by: Mapped[str | None] = mapped_column(String(100), nullable=True)
+    verified_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    approval_notes: Mapped[str | None] = mapped_column(Text, nullable=True)
+    location_uncertain: Mapped[bool] = mapped_column(Boolean, default=False)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, onupdate=utcnow)
 
@@ -86,7 +92,7 @@ class Submission(Base):
     __tablename__ = "mp_submissions"
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
-    disaster_id: Mapped[int] = mapped_column(ForeignKey("mp_disasters.id"), index=True)
+    disaster_id: Mapped[int | None] = mapped_column(ForeignKey("mp_disasters.id"), nullable=True, index=True)
     kind: Mapped[str] = mapped_column(String(40), default="missing_report")
     status: Mapped[str] = mapped_column(String(30), default="pending", index=True)
     person_id: Mapped[int | None] = mapped_column(ForeignKey("mp_missing_people.id"), nullable=True)
@@ -105,6 +111,12 @@ class Submission(Base):
     clothing: Mapped[str | None] = mapped_column(Text, nullable=True)
     identification_details: Mapped[str | None] = mapped_column(Text, nullable=True)
     public_contact_number: Mapped[str | None] = mapped_column(String(80), nullable=True)
+    source_confirmed: Mapped[bool] = mapped_column(Boolean, default=False)
+    verification_confidence: Mapped[str | None] = mapped_column(String(20), nullable=True)
+    verified_by: Mapped[str | None] = mapped_column(String(100), nullable=True)
+    verified_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    approval_notes: Mapped[str | None] = mapped_column(Text, nullable=True)
+    location_uncertain: Mapped[bool] = mapped_column(Boolean, default=False)
 
     reporter_name_private: Mapped[str | None] = mapped_column(String(255), nullable=True)
     reporter_phone_private: Mapped[str | None] = mapped_column(String(80), nullable=True)
@@ -119,7 +131,7 @@ class DiscoveryCandidate(Base):
     __table_args__ = (UniqueConstraint("disaster_id", "url", name="uq_mp_discovery_event_url"),)
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
-    disaster_id: Mapped[int] = mapped_column(ForeignKey("mp_disasters.id"), index=True)
+    disaster_id: Mapped[int | None] = mapped_column(ForeignKey("mp_disasters.id"), nullable=True, index=True)
     platform: Mapped[str] = mapped_column(String(40), default="facebook", index=True)
     query: Mapped[str] = mapped_column(Text)
     url: Mapped[str] = mapped_column(Text)
@@ -179,6 +191,17 @@ class PersonCaseState(Base):
         default=utcnow,
         onupdate=utcnow,
     )
+
+
+class CaseTimeline(Base):
+    __tablename__ = "mp_case_timeline"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    person_id: Mapped[int] = mapped_column(ForeignKey("mp_missing_people.id"), index=True)
+    event_type: Mapped[str] = mapped_column(String(60), index=True)
+    actor: Mapped[str] = mapped_column(String(100), default="system")
+    note: Mapped[str | None] = mapped_column(Text, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, index=True)
 
 
 class NotificationSubscription(Base):

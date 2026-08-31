@@ -14,7 +14,7 @@ from sqlalchemy.orm import selectinload
 from ..config import settings
 from ..database import SessionLocal
 from ..models import (
-    AdminUser, Disaster, DiscoveryCandidate, DiscoverySearchTag,
+    AdminUser, CaseTimeline, Disaster, DiscoveryCandidate, DiscoverySearchTag,
     DiscoverySourceSeed, MissingPerson, NotificationOutbox,
     NotificationSubscription, PersonCaseState, Source, Submission, utcnow,
 )
@@ -234,6 +234,15 @@ def _set_person_case_status(
         # Resolved/deceased cases leave the active public missing-person list.
         person.published = False
     return state
+
+
+def _add_case_timeline(db, request: Request, person_id: int, event_type: str, note: str | None = None) -> None:
+    db.add(CaseTimeline(
+        person_id=person_id,
+        event_type=event_type,
+        actor=str(request.session.get("admin") or "system"),
+        note=str(note or "").strip() or None,
+    ))
 
 
 def _source_notes_for_candidate(
@@ -787,6 +796,11 @@ def admin_person(request: Request, person_id: int):
                 for status in ("pending", "sent", "failed")
             },
             mask_destination=mask_destination,
+            timeline=list(db.scalars(
+                select(CaseTimeline)
+                .where(CaseTimeline.person_id == person.id)
+                .order_by(CaseTimeline.created_at.desc())
+            ).all()),
         )
 
 
@@ -814,6 +828,12 @@ async def admin_person_edit(request: Request, person_id: int):
         person.clothing = str(form.get("clothing") or "").strip() or None
         person.identification_details = str(form.get("identification_details") or "").strip() or None
         person.public_contact_number = str(form.get("public_contact_number") or "").strip() or None
+        person.source_confirmed = str(form.get("source_confirmed") or "") == "1"
+        person.verification_confidence = str(form.get("verification_confidence") or "").strip().casefold() or None
+        person.verified_by = str(request.session.get("admin") or "system")
+        person.verified_at = utcnow()
+        person.approval_notes = str(form.get("approval_notes") or "").strip() or None
+        person.location_uncertain = str(form.get("location_uncertain") or "") == "1"
         person.residential_address_private = str(form.get("residential_address_private") or "").strip() or None
         photo_upload = form.get("photo")
         if photo_upload is not None and getattr(photo_upload, "filename", ""):
@@ -831,6 +851,7 @@ async def admin_person_edit(request: Request, person_id: int):
                 update_note=str(form.get("status_note") or "").strip() or None,
             )
         audit(db, request, "edit_person", "person", person.id)
+        _add_case_timeline(db, request, person.id, "case_edited", "Case details updated")
         db.commit()
     return RedirectResponse(f"/admin/people/{person_id}", status_code=303)
 
@@ -971,6 +992,7 @@ async def admin_person_status(request: Request, person_id: int):
             person.id,
             f"status={status}; note={note[:300]}",
         )
+        _add_case_timeline(db, request, person.id, f"status_{status}", note)
         db.commit()
     return RedirectResponse(f"/admin/people/{person_id}", status_code=303)
 
@@ -985,6 +1007,7 @@ def admin_publish(request: Request, person_id: int):
         if person:
             person.published = not person.published
             audit(db, request, "publish_toggle", "person", person.id, str(person.published))
+            _add_case_timeline(db, request, person.id, "published" if person.published else "unpublished")
             db.commit()
     return RedirectResponse(f"/admin/people/{person_id}", status_code=303)
 
@@ -1000,6 +1023,7 @@ def admin_archive(request: Request, person_id: int):
             person.archived = True
             person.published = False
             audit(db, request, "archive_person", "person", person.id)
+            _add_case_timeline(db, request, person.id, "archived")
             db.commit()
     return RedirectResponse("/admin/people", status_code=303)
 
@@ -1181,6 +1205,12 @@ async def approve_submission_new(request: Request, submission_id: int):
             identification_details=sub.identification_details,
             public_contact_number=sub.public_contact_number,
             private_contact_number=sub.reporter_phone_private,
+            source_confirmed=sub.source_confirmed,
+            verification_confidence=sub.verification_confidence,
+            verified_by=str(request.session.get("admin") or "system"),
+            verified_at=utcnow(),
+            approval_notes=sub.approval_notes,
+            location_uncertain=sub.location_uncertain,
             published=publish_now,
         )
         db.add(person)
@@ -1188,6 +1218,9 @@ async def approve_submission_new(request: Request, submission_id: int):
         db.add(PersonCaseState(person_id=person.id, status="missing"))
         sub.person_id = person.id
         sub.status = "approved"
+        _add_case_timeline(db, request, person.id, "created_from_submission", f"Submission {sub.id} approved")
+        if publish_now:
+            _add_case_timeline(db, request, person.id, "published", "Published during submission approval")
         if sub.social_url:
             db.add(
                 Source(
