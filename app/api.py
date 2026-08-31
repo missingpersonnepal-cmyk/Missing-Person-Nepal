@@ -10,7 +10,7 @@ from .models import Disaster, MissingPerson, PersonCaseState
 router = APIRouter(prefix="/api/v1", tags=["public"])
 
 
-def person_payload(person: MissingPerson, include_sources: bool = False) -> dict:
+def person_payload(person: MissingPerson, include_sources: bool = False, case_status: str = "missing") -> dict:
     payload = {
         "case_number": person.case_number,
         "disaster_id": person.disaster_id,
@@ -27,6 +27,8 @@ def person_payload(person: MissingPerson, include_sources: bool = False) -> dict
         "clothing": person.clothing,
         "identification_details": person.identification_details,
         "public_contact_number": person.public_contact_number,
+        "case_status": case_status,
+        "created_at": person.created_at.isoformat() if person.created_at else None,
         "updated_at": person.updated_at.isoformat() if person.updated_at else None,
     }
     if include_sources:
@@ -56,6 +58,7 @@ def events():
                 "affected_locations": d.locations(),
                 "center_lat": d.center_lat,
                 "center_lon": d.center_lon,
+                "boundary_geojson": d.boundary_geojson,
                 "active": d.active,
             }
             for d in rows
@@ -90,7 +93,10 @@ def people(
                     MissingPerson.last_seen_location.ilike(pattern),
                 )
             )
-        return [person_payload(p) for p in db.scalars(stmt.limit(limit)).all()]
+        rows = db.scalars(stmt.limit(limit)).all()
+        state_rows = db.scalars(select(PersonCaseState).where(PersonCaseState.person_id.in_([p.id for p in rows]))).all()
+        state_map = {row.person_id: row.status for row in state_rows}
+        return [person_payload(p, case_status=state_map.get(p.id, "missing")) for p in rows]
 
 
 @router.get("/people/{case_number}")
@@ -107,4 +113,37 @@ def person(case_number: str):
         )
         if row is None:
             raise HTTPException(status_code=404, detail="Case not found")
-        return person_payload(row, include_sources=True)
+        state = db.get(PersonCaseState, row.id)
+        return person_payload(row, include_sources=True, case_status=state.status if state else "missing")
+
+
+@router.get("/nearby")
+def nearby(
+    lat: float = Query(...),
+    lon: float = Query(...),
+    radius_km: float = Query(default=5.0, ge=0.1, le=200.0),
+):
+    def haversine(a_lat, a_lon, b_lat, b_lon):
+        from math import asin, cos, radians, sin, sqrt
+        r = 6371.0
+        dlat = radians(b_lat - a_lat)
+        dlon = radians(b_lon - a_lon)
+        sa = sin(dlat / 2) ** 2 + cos(radians(a_lat)) * cos(radians(b_lat)) * sin(dlon / 2) ** 2
+        return 2 * r * asin(sqrt(sa))
+
+    with SessionLocal() as db:
+        rows = db.scalars(
+            select(MissingPerson).where(
+                MissingPerson.published.is_(True),
+                MissingPerson.archived.is_(False),
+                MissingPerson.last_seen_lat.is_not(None),
+                MissingPerson.last_seen_lon.is_not(None),
+            )
+        ).all()
+        items = []
+        for row in rows:
+            distance = haversine(lat, lon, row.last_seen_lat, row.last_seen_lon)
+            if distance <= radius_km:
+                state = db.get(PersonCaseState, row.id)
+                items.append({**person_payload(row, case_status=state.status if state else "missing"), "distance_km": round(distance, 2)})
+        return sorted(items, key=lambda item: item["distance_km"])

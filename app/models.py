@@ -23,6 +23,7 @@ class Disaster(Base):
     affected_locations: Mapped[str] = mapped_column(Text, default="")
     center_lat: Mapped[float | None] = mapped_column(Float, nullable=True)
     center_lon: Mapped[float | None] = mapped_column(Float, nullable=True)
+    boundary_geojson: Mapped[str | None] = mapped_column(Text, nullable=True)
     active: Mapped[bool] = mapped_column(Boolean, default=True, index=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
 

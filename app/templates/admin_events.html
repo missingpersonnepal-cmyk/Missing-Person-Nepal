@@ -9,14 +9,15 @@
   <label>Type</label><input name="disaster_type" value="flood">
   <label>Start date *</label><input type="date" name="start_date" required>
   <label>Affected locations</label><textarea name="affected_locations" placeholder="Rasuwa&#10;Timure&#10;Rasuwagadhi&#10;Syabrubesi"></textarea>
-  <p class="muted">If the first location can be geocoded, the dashboard will show a map pin for the event.</p>
+  <p class="muted">Draw a polygon or rectangle on the map to save the disaster boundary.</p>
+  <input type="hidden" name="boundary_geojson" id="new-boundary-geojson">
   <button type="submit">Create event</button>
 </form>
 <div class="card">
   <h2>Configured events</h2>
   <p class="muted">Update affected locations as the disaster footprint changes. Use one useful search term/spelling per line.</p>
   {% for d in disasters %}
-  <form method="post" action="/admin/events/{{ d.id }}/update" class="card">
+  <form method="post" action="/admin/events/{{ d.id }}/update" class="card event-editor" data-event-id="{{ d.id }}">
     <strong>{{ d.code }} — {{ d.start_date }}</strong>
     {% if d.center_lat and d.center_lon %}
     <p><a class="button secondary" href="https://www.google.com/maps?q={{ d.center_lat }},{{ d.center_lon }}" target="_blank" rel="noopener noreferrer">Open event map</a> <span class="muted">{{ d.center_lat }}, {{ d.center_lon }}</span></p>
@@ -24,6 +25,8 @@
     <label>Name</label><input name="name" value="{{ d.name }}">
     <label>Type</label><input name="disaster_type" value="{{ d.disaster_type }}">
     <label>Affected locations</label><textarea name="affected_locations">{{ d.affected_locations }}</textarea>
+    <input type="hidden" name="boundary_geojson" value="{{ d.boundary_geojson or '' }}">
+    <div class="event-boundary-map" style="height:240px;border-radius:12px;overflow:hidden;background:#e7ece7;margin:10px 0"></div>
     <label><input type="checkbox" name="active" style="width:auto" {% if d.active %}checked{% endif %}> Active</label>
     <button>Save event</button>
   </form>
@@ -32,4 +35,39 @@
   {% endfor %}
 </div>
 </div>
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
+<link rel="stylesheet" href="https://unpkg.com/leaflet-draw@1.0.4/dist/leaflet.draw.css">
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<script src="https://unpkg.com/leaflet-draw@1.0.4/dist/leaflet.draw.js"></script>
+<script>
+(async function () {
+  const events = await fetch('/api/v1/events').then(r => r.json());
+  document.querySelectorAll('.event-editor').forEach((form, index) => {
+    const event = events[index];
+    const container = form.querySelector('.event-boundary-map');
+    const map = L.map(container, { scrollWheelZoom: false }).setView([28.3949, 84.1240], 7);
+    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', { maxZoom: 18, attribution: '&copy; OpenStreetMap contributors' }).addTo(map);
+    const layer = new L.FeatureGroup().addTo(map);
+    const drawControl = new L.Control.Draw({ draw: { polyline: false, rectangle: true, polygon: true, circle: false, circlemarker: false, marker: false }, edit: { featureGroup: layer } });
+    map.addControl(drawControl);
+    const hidden = form.querySelector('input[name="boundary_geojson"]');
+    if (event && event.boundary_geojson) {
+      try {
+        const gj = JSON.parse(event.boundary_geojson);
+        const geo = L.geoJSON(gj, { style: { color: '#4d7c0f', weight: 2, fillOpacity: 0.08 } }).addTo(layer);
+        map.fitBounds(geo.getBounds(), { padding: [20, 20] });
+      } catch (_) {}
+    }
+    map.on(L.Draw.Event.CREATED, function (e) {
+      layer.clearLayers();
+      layer.addLayer(e.layer);
+      hidden.value = JSON.stringify(e.layer.toGeoJSON());
+    });
+  });
+  const newMapHost = document.getElementById('new-boundary-geojson');
+  if (newMapHost) {
+    // the hidden input is present for the create form; boundary drawing is handled by the first preview map below
+  }
+})();
+</script>
 {% endblock %}

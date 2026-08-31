@@ -2,7 +2,10 @@
 {% block content %}
 <div class="page-heading">
   <div><div class="eyebrow">Operations command center</div><h1>Admin Dashboard</h1><p class="muted">Work from left to right: triage sources, extract relevant reports, resolve duplicates, approve records, then publish.</p></div>
-  <a class="button" href="/admin/discovery">Open Discovery</a>
+  <div class="inline">
+    <a class="button" href="/admin/discovery">Open Discovery</a>
+    <button class="secondary" type="button" id="print-map-btn">Print / Save PDF</button>
+  </div>
 </div>
 <section class="workflow-board" aria-label="Recommended workflow">
   <a class="workflow-step" href="/admin/discovery?view=review"><span class="workflow-step__number">1</span><span><strong>Triage new sources</strong><small>{{ stats.to_review }} waiting for review</small></span></a>
@@ -18,48 +21,166 @@
   <div class="metric-card"><span>Evidence sources</span><strong>{{ stats.sources }}</strong></div>
   <div class="metric-card"><span>New candidates</span><strong>{{ stats.candidates }}</strong></div>
 </div>
+
 <div class="grid dashboard-lower">
   <section class="card">
     <div class="eyebrow">Live map</div>
-    <h2>Event area and last-seen pins</h2>
-    <div id="admin-map" style="height:420px;border-radius:12px;overflow:hidden;background:#e7ece7"></div>
-    <p class="muted" style="margin-top:10px">Pins show published cases with saved coordinates. The shaded area is a lightweight circle around the active event center.</p>
+    <h2>Clustered pins, heat, nearby search, and route overlays</h2>
+    <div class="inline">
+      <div><label>Status</label><select id="map-status-filter"><option value="missing">Missing</option><option value="found">Found</option><option value="identified">Identified</option><option value="all">All</option></select></div>
+      <div><label>Days</label><input id="map-days" type="range" min="1" max="30" value="30"><div class="muted"><span id="map-days-label">30</span> days</div></div>
+      <div><label>Nearby radius km</label><input id="nearby-radius" type="number" min="1" max="100" value="5"></div>
+      <div><label>&nbsp;</label><button type="button" id="nearby-run">Find nearby</button></div>
+    </div>
+    <div class="inline">
+      <button type="button" class="secondary" id="toggle-clusters">Clusters</button>
+      <button type="button" class="secondary" id="toggle-heat">Heatmap</button>
+      <button type="button" class="secondary" id="toggle-route">Route overlay</button>
+    </div>
+    <div id="admin-map" style="height:460px;border-radius:12px;overflow:hidden;background:#e7ece7"></div>
+    <div class="card" style="margin-top:12px">
+      <strong>Map summary</strong>
+      <div class="inline">
+        <div class="metric-card"><span>Map pins</span><strong id="map-pin-count">0</strong></div>
+        <div class="metric-card"><span>Hotspots</span><strong id="map-hotspot-count">0</strong></div>
+        <div class="metric-card"><span>Nearby results</span><strong id="map-nearby-count">0</strong></div>
+      </div>
+      <div id="map-nearby-list" class="muted"></div>
+    </div>
   </section>
   <section class="card"><div class="eyebrow">Active operations</div><h2>Disaster events</h2>{% for d in disasters %}<div class="event-row"><span><strong>{{ d.name }}</strong><small>{{ d.start_date }} - {{ d.disaster_type }}</small></span><span class="badge">{{ 'Active' if d.active else 'Inactive' }}</span></div>{% else %}<p>No disaster event is configured.</p><a class="button" href="/admin/events">Create the first event</a>{% endfor %}</section>
+  <section class="card"><div class="eyebrow">Time slider</div><h2>Track reports over time</h2><p class="muted">Move the slider to show only cases created in the last N days.</p><div id="time-slider-caption"></div></section>
   <section class="card"><div class="eyebrow">Shift checklist</div><h2>Before you finish</h2><ul class="checklist"><li>Review urgent and high-confidence sources first.</li><li>Attach repeat source posts to an existing published case.</li><li>Confirm public phone numbers and photos before publishing.</li><li>Move resolved cases to Found or Identified promptly.</li><li>Export an event handover file at the end of the shift.</li></ul><a href="/admin/export">Open secure exports</a></section>
   <section class="card"><div class="eyebrow">Training</div><h2>How to use the system</h2><p class="muted">Open the admin help hub for a plain-language walkthrough in English and Nepali, plus a slide deck you can share during handover.</p><div class="inline"><a class="button" href="/admin/help">Open help hub</a><a class="button secondary" href="/admin/help/manual.pptx">Download PPTX</a></div></section>
 </div>
+
 <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
+<link rel="stylesheet" href="https://unpkg.com/leaflet.markercluster@1.5.3/dist/MarkerCluster.css">
+<link rel="stylesheet" href="https://unpkg.com/leaflet.markercluster@1.5.3/dist/MarkerCluster.Default.css">
+<link rel="stylesheet" href="https://unpkg.com/leaflet-draw@1.0.4/dist/leaflet.draw.css">
 <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<script src="https://unpkg.com/leaflet.markercluster@1.5.3/dist/leaflet.markercluster.js"></script>
+<script src="https://unpkg.com/leaflet.heat@0.2.0/dist/leaflet-heat.js"></script>
+<script src="https://unpkg.com/leaflet-draw@1.0.4/dist/leaflet.draw.js"></script>
 <script>
-(function () {
-  const active = {{ (active_disaster.center_lat if active_disaster else none)|tojson }}, activeLon = {{ (active_disaster.center_lon if active_disaster else none)|tojson }};
-  const people = {{ map_people_json|safe }};
+(async function () {
+  const events = await fetch('/api/v1/events').then(r => r.json());
+  const activeEvent = events.find(e => e.active) || events[0] || null;
+  const peopleAll = activeEvent ? await fetch(`/api/v1/people?disaster_id=${activeEvent.id}&limit=250`).then(r => r.json()) : [];
   const map = L.map('admin-map', { scrollWheelZoom: false });
-  const osm = L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
-    maxZoom: 18,
-    attribution: '&copy; OpenStreetMap contributors'
-  }).addTo(map);
-  const bounds = [];
-  if (active !== null && activeLon !== null) {
-    const center = [active, activeLon];
-    L.circle(center, { radius: 9000, color: '#bb7a11', fillColor: '#f3a53a', fillOpacity: 0.16, weight: 2 }).addTo(map);
-    L.marker(center).addTo(map).bindPopup('Active disaster center');
-    bounds.push(center);
+  L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', { maxZoom: 18, attribution: '&copy; OpenStreetMap contributors' }).addTo(map);
+  const clusterLayer = L.markerClusterGroup();
+  const heatLayer = L.heatLayer([], { radius: 24, blur: 18, maxZoom: 12 });
+  const drawLayer = new L.FeatureGroup().addTo(map);
+  const markers = [];
+  let routeLayer = L.layerGroup().addTo(map);
+  let nearbyMarker = null;
+  const drawControl = new L.Control.Draw({ draw: { polyline: false, rectangle: true, polygon: true, circle: false, circlemarker: false, marker: false }, edit: { featureGroup: drawLayer } });
+  map.addControl(drawControl);
+
+  function updateSummary(filtered) {
+    document.getElementById('map-pin-count').textContent = String(filtered.length);
+    document.getElementById('map-hotspot-count').textContent = String(new Set(filtered.map(p => `${Math.round(p.lat * 10) / 10},${Math.round(p.lon * 10) / 10}`)).size);
+    document.getElementById('time-slider-caption').textContent = `${filtered.length} case(s) visible`;
   }
-  people.forEach((person) => {
-    if (person.lat == null || person.lon == null) return;
-    const point = [person.lat, person.lon];
-    L.marker(point).addTo(map).bindPopup(`<strong>${person.name}</strong><br>${person.case_number}<br>${person.location || ''}`);
-    bounds.push(point);
+
+  function rebuild(filtered) {
+    clusterLayer.clearLayers();
+    heatLayer.setLatLngs([]);
+    markers.length = 0;
+    filtered.forEach(person => {
+      if (person.last_seen_lat == null || person.last_seen_lon == null) return;
+      const ll = [person.last_seen_lat, person.last_seen_lon];
+      const marker = L.marker(ll).bindPopup(`<strong>${person.name}</strong><br>${person.case_number}<br>${person.last_seen_location || ''}<br><span class="muted">Resolving place label...</span><br><a href="/person/${person.case_number}">Open case</a>`);
+      marker.person = person;
+      markers.push(marker);
+      fetch(`/admin/geo/reverse?lat=${person.last_seen_lat}&lon=${person.last_seen_lon}`).then(r => r.json()).then(data => {
+        marker.setPopupContent(`<strong>${person.name}</strong><br>${person.case_number}<br>${person.last_seen_location || ''}<br>${data.label || ''}<br><a href="/person/${person.case_number}">Open case</a>`);
+      }).catch(() => {});
+      clusterLayer.addLayer(marker);
+      heatLayer.addLatLng(ll);
+    });
+    updateSummary(filtered.filter(p => p.last_seen_lat != null && p.last_seen_lon != null));
+  }
+
+  function filteredPeople() {
+    const status = document.getElementById('map-status-filter').value;
+    const days = parseInt(document.getElementById('map-days').value, 10);
+    const cutoff = Date.now() - days * 86400000;
+    return peopleAll.filter(p => {
+      const okStatus = status === 'all' || (p.case_status || 'missing') === status;
+      const createdAt = p.created_at ? Date.parse(p.created_at) : Date.now();
+      return okStatus && createdAt >= cutoff;
+    });
+  }
+
+  function refresh() {
+    const filtered = filteredPeople();
+    map.removeLayer(clusterLayer);
+    map.removeLayer(heatLayer);
+    drawLayer.clearLayers();
+    map.addLayer(clusterLayer);
+    if (document.getElementById('toggle-heat').dataset.on === '1') map.addLayer(heatLayer);
+    rebuild(filtered);
+    const points = filtered.filter(p => p.last_seen_lat != null && p.last_seen_lon != null).map(p => [p.last_seen_lat, p.last_seen_lon]);
+    if (activeEvent && activeEvent.center_lat != null && activeEvent.center_lon != null) {
+      const center = [activeEvent.center_lat, activeEvent.center_lon];
+      const circle = L.circle(center, { radius: 9000, color: '#bb7a11', fillColor: '#f3a53a', fillOpacity: 0.16, weight: 2 }).addTo(drawLayer);
+      circle.bindPopup('Active disaster center');
+      fetch(`/admin/geo/reverse?lat=${activeEvent.center_lat}&lon=${activeEvent.center_lon}`).then(r => r.json()).then(data => { circle.bindPopup(`Active disaster center<br>${data.label || ''}`); }).catch(() => {});
+      points.push(center);
+      if (activeEvent.boundary_geojson) {
+        try { L.geoJSON(JSON.parse(activeEvent.boundary_geojson), { style: { color: '#4d7c0f', weight: 2, fillOpacity: 0.08 } }).addTo(drawLayer); } catch (_) {}
+      }
+    }
+    if (points.length) map.fitBounds(points, { padding: [25, 25] }); else map.setView([28.3949, 84.1240], 7);
+  }
+
+  document.getElementById('map-days').addEventListener('input', e => { document.getElementById('map-days-label').textContent = e.target.value; refresh(); });
+  document.getElementById('map-status-filter').addEventListener('change', refresh);
+  document.getElementById('toggle-clusters').addEventListener('click', () => { if (map.hasLayer(clusterLayer)) { map.removeLayer(clusterLayer); } else { map.addLayer(clusterLayer); } });
+  document.getElementById('toggle-heat').addEventListener('click', (e) => { e.target.dataset.on = e.target.dataset.on === '1' ? '0' : '1'; e.target.textContent = e.target.dataset.on === '1' ? 'Heatmap on' : 'Heatmap'; refresh(); });
+  document.getElementById('toggle-route').addEventListener('click', async () => {
+    const first = markers[0];
+    if (!first || !activeEvent || activeEvent.center_lat == null || activeEvent.center_lon == null) return;
+    routeLayer.clearLayers();
+    const origin = `${activeEvent.center_lat},${activeEvent.center_lon}`;
+    const destination = `${first.person.last_seen_lat},${first.person.last_seen_lon}`;
+    const route = await fetch(`/admin/geo/route?origin=${encodeURIComponent(origin)}&destination=${encodeURIComponent(destination)}&mode=driving`).then(r => r.json());
+    if (route.geometry) {
+      const line = L.geoJSON(route.geometry, { style: { color: '#0f766e', weight: 4 } });
+      line.addTo(routeLayer);
+      map.fitBounds(line.getBounds(), { padding: [25,25] });
+    }
   });
-  if (bounds.length) {
-    map.fitBounds(bounds, { padding: [30, 30] });
-  } else if (active !== null && activeLon !== null) {
-    map.setView([active, activeLon], 10);
-  } else {
-    map.setView([28.3949, 84.1240], 7);
-  }
+  document.getElementById('print-map-btn').addEventListener('click', () => window.print());
+  document.getElementById('nearby-run').addEventListener('click', async () => {
+    const first = markers[0];
+    if (!first) return;
+    const radius = parseFloat(document.getElementById('nearby-radius').value || '5');
+    const results = await fetch(`/api/v1/nearby?lat=${first.person.last_seen_lat}&lon=${first.person.last_seen_lon}&radius_km=${radius}`).then(r => r.json());
+    document.getElementById('map-nearby-count').textContent = String(results.length);
+    document.getElementById('map-nearby-list').innerHTML = results.slice(0, 8).map(item => `<div><strong>${item.name}</strong> ${item.distance_km} km <a href="/person/${item.case_number}">${item.case_number}</a></div>`).join('');
+    if (nearbyMarker) nearbyMarker.remove();
+    nearbyMarker = L.circleMarker([first.person.last_seen_lat, first.person.last_seen_lon], { radius: 10, color: '#7c3aed' }).addTo(map);
+  });
+  map.on(L.Draw.Event.CREATED, function (event) {
+    drawLayer.clearLayers();
+    drawLayer.addLayer(event.layer);
+    const geojson = event.layer.toGeoJSON();
+    const form = document.querySelector('form[action="/admin/events/' + (activeEvent ? activeEvent.id : '') + '/update"]');
+    if (form) {
+      let input = form.querySelector('input[name="boundary_geojson"]');
+      if (!input) {
+        input = document.createElement('input');
+        input.type = 'hidden';
+        input.name = 'boundary_geojson';
+        form.appendChild(input);
+      }
+      input.value = JSON.stringify(geojson);
+    }
+  });
+  refresh();
 })();
 </script>
 {% endblock %}

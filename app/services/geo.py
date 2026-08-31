@@ -65,3 +65,16 @@ def reverse_geocode(lat: float, lon: float) -> str | None:
         return data.get("display_name") or data.get("name") or data.get("label")
     return None
 
+
+def route(origin: str, destination: str, mode: str = "driving") -> dict:
+    if not settings.geo_api_key.strip():
+        raise RuntimeError("Geo API key is not configured")
+    url = f"{settings.geo_api_base_url}/api/geo/route"
+    with httpx.Client(timeout=20.0) as client:
+        response = client.get(
+            url,
+            params={"origin": origin, "destination": destination, "mode": mode},
+            headers=_headers(),
+        )
+        response.raise_for_status()
+        return response.json()

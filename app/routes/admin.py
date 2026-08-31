@@ -38,7 +38,7 @@ from ..services.master_records import apply_submission_to_master
 from ..services.duplicates import find_duplicates
 from ..services.exports import build_csv, build_xlsx
 from ..services.files import save_image
-from ..services.geo import GeoPoint, geocode, parse_coords
+from ..services.geo import GeoPoint, geocode, parse_coords, route as geo_route, reverse_geocode
 from ..services.source_images import discover_public_post_image, discover_public_post_text, download_public_source_image, is_allowed_public_image_url
 from ..services.source_ocr import extract_ocr_text, ocr_available
 from ..services.notifications import (
@@ -250,6 +250,26 @@ def _geo_point_for_text(text: str) -> GeoPoint | None:
     if point:
         return point
     return geocode(text)
+
+
+@router.get("/admin/geo/reverse")
+def admin_geo_reverse(request: Request, lat: float, lon: float):
+    gate = admin_gate(request)
+    if gate:
+        return gate
+    label = reverse_geocode(lat, lon)
+    return JSONResponse({"label": label or f"{lat}, {lon}"})
+
+
+@router.get("/admin/geo/route")
+def admin_geo_route(request: Request, origin: str, destination: str, mode: str = "driving"):
+    gate = admin_gate(request)
+    if gate:
+        return gate
+    try:
+        return JSONResponse(geo_route(origin=origin, destination=destination, mode=mode))
+    except Exception as exc:
+        return JSONResponse({"error": str(exc)}, status_code=502)
 
 
 @router.get("/admin/media/{filename}")
@@ -578,6 +598,7 @@ async def admin_event_create(request: Request):
             affected_locations=affected_locations,
             center_lat=center.lat if center else None,
             center_lon=center.lon if center else None,
+            boundary_geojson=str(form.get("boundary_geojson") or "").strip() or None,
             active=True,
         )
         db.add(disaster)
@@ -607,6 +628,7 @@ async def admin_event_update(request: Request, disaster_id: int):
         disaster.affected_locations = affected_locations
         disaster.center_lat = center.lat if center else None
         disaster.center_lon = center.lon if center else None
+        disaster.boundary_geojson = str(form.get("boundary_geojson") or "").strip() or None
         disaster.active = str(form.get("active") or "") == "on"
         audit(db, request, "update_event", "disaster", disaster.id, disaster.name)
         db.commit()
