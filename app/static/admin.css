@@ -27,3 +27,4 @@
 .panic-link { color:#fff!important; background:#b42318; border-radius:6px; padding:9px 12px!important; font-weight:800; }
 .panic-button { background:#b42318!important; font-size:1.05rem; min-height:50px; }
 .emergency-card { border-top:5px solid #b42318; max-width:720px; }
+.panic-actions { margin-top:20px; padding-top:16px; border-top:1px solid #ead2d0; }

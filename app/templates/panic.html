@@ -14,7 +14,14 @@
     <label>Optional message</label>
     <textarea name="message" rows="4" placeholder="Tell responders what is happening or who needs help."></textarea>
     <p id="panic-status" class="muted">Your browser will ask for location permission.</p>
-    <button type="submit" class="panic-button" disabled>Send SOS Location</button>
+    <button type="submit" class="panic-button" disabled>Send SOS Location to Operations</button>
+    <div id="panic-actions" class="panic-actions" hidden>
+      <strong>Contact Nepal Police</strong>
+      <p class="muted">The message is drafted on your device. Review it and press Send.</p>
+      <a id="police-sms" class="button panic-button" href="sms:100">Draft SMS to Police Control (100)</a>
+      <a class="button secondary" href="tel:100">Call Police Control: 100</a>
+      <a class="button secondary" href="tel:16600141516">Call toll-free: 16600141516</a>
+    </div>
   </form>
 </div>
 <script>
@@ -26,6 +33,9 @@ if (navigator.geolocation) {
     document.getElementById('panic-latitude').value = position.coords.latitude;
     document.getElementById('panic-longitude').value = position.coords.longitude;
     document.getElementById('panic-location-label').value = `${position.coords.latitude.toFixed(6)}, ${position.coords.longitude.toFixed(6)}`;
+    const body = encodeURIComponent(`SOS emergency. My location: https://maps.google.com/?q=${position.coords.latitude},${position.coords.longitude}. Please send help.`);
+    document.getElementById('police-sms').href = `sms:100?body=${body}`;
+    document.getElementById('panic-actions').hidden = false;
     panicStatus.textContent = 'Location ready. Press the button once to send the alert.';
     panicButton.disabled = false;
   }, () => { panicStatus.textContent = 'Location permission was not granted. SOS cannot be sent without coordinates.'; });
