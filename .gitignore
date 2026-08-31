@@ -14,5 +14,6 @@ exports/*
 .DS_Store
 .idea/
 .vscode/
+.ppt-build/
 
 *.egg-info/
