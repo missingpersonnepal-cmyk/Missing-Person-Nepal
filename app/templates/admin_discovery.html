@@ -5,6 +5,9 @@
 {% if queue_complete %}
 <div class="card" style="border:2px solid #2f855a"><strong>Review queue complete.</strong></div>
 {% endif %}
+{% if batch_prefilled is not none %}
+<div class="notice"><strong>AI prefill finished.</strong> {{ batch_prefilled }} pending case(s) created for review{% if batch_skipped %}, {{ batch_skipped }} skipped as duplicates or incomplete{% endif %}{% if batch_failed %}, {{ batch_failed }} source(s) failed and remain available{% endif %}. <a href="/admin/submissions">Open pending cases</a></div>
+{% endif %}
 {# Legacy section names retained for regression compatibility: Custom Search Tags / Phrases; Generated priority source searches. #}
 <p class="muted">Public-index discovery only. Review a finding before it becomes a missing-person case.</p>
 <span style="display:none">Generated priority source searches · Missing-Person Sharer / Group Finder · Custom Search Tags / Phrases · Full public post text / additional context</span>
@@ -251,6 +254,18 @@
 
 <h2>{% if view == 'review' %}To Review{% elif view == 'relevant' %}Relevant Findings{% elif view == 'duplicates' %}Possible Duplicate Sources{% elif view == 'irrelevant' %}Irrelevant Archive{% else %}Done Posts{% endif %}</h2>
 {% if view == 'duplicates' %}<p class="muted">These sources exactly matched a published person's name. Review each source before attaching it to the published case or restoring it as a separate report.</p>{% endif %}
+{% if view == 'relevant' and candidates %}
+<div class="card" style="border:2px solid var(--brand); background:var(--surface-strong, #eef4ef)">
+  <h3>Process all relevant findings</h3>
+  <p class="muted">AI will read each relevant source and create pending case drafts. Nothing is published automatically. Review and publish each draft from Pending cases.</p>
+  <form method="post" action="/admin/discovery/ai-prefill-relevant" onsubmit="return confirm('Create AI drafts for all relevant findings? No case will be published automatically.')">
+    <input type="hidden" name="disaster_id" value="{{ selected.id }}">
+    <input type="hidden" name="platform" value="{{ platform }}">
+    <button>AI Prefill All Relevant Findings</button>
+    <a class="button secondary" href="/admin/submissions">Open Pending Cases</a>
+  </form>
+</div>
+{% endif %}
 
 <div class="card" id="bulk-discovery-form">
   <input type="hidden" name="disaster_id" value="{{ selected.id }}">

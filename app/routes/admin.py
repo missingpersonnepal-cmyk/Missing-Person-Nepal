@@ -1413,6 +1413,9 @@ def discovery_page(
     wide_added: int | None = None,
     wide_error: int | None = None,
     queue_complete: int | None = None,
+    batch_prefilled: int | None = None,
+    batch_skipped: int | None = None,
+    batch_failed: int | None = None,
 ):
     gate = admin_gate(request)
     if gate:
@@ -1631,6 +1634,9 @@ def discovery_page(
             wide_query_plan=wide_query_plan,
             wide_error=bool(wide_error),
             queue_complete=bool(queue_complete),
+            batch_prefilled=batch_prefilled,
+            batch_skipped=batch_skipped,
+            batch_failed=batch_failed,
             pipeline_counts=pipeline_counts,
         )
 
@@ -2090,6 +2096,109 @@ async def discovery_candidates_bulk_status(request: Request):
     if q:
         params["q"] = q
     return RedirectResponse("/admin/discovery?" + urlencode(params), status_code=303)
+
+
+@router.post("/admin/discovery/ai-prefill-relevant")
+async def discovery_ai_prefill_relevant(request: Request):
+    """Extract every relevant source into pending submissions for human review."""
+    gate = admin_gate(request)
+    if gate:
+        return gate
+
+    form = await request.form()
+    disaster_id = parse_int(form.get("disaster_id"))
+    platform = str(form.get("platform") or "facebook").strip().casefold()
+    if not disaster_id:
+        return RedirectResponse("/admin/discovery", status_code=303)
+
+    created = skipped = failed = 0
+    with SessionLocal() as db:
+        disaster = db.get(Disaster, disaster_id)
+        candidates = list(db.scalars(
+            select(DiscoveryCandidate)
+            .where(
+                DiscoveryCandidate.disaster_id == disaster_id,
+                DiscoveryCandidate.platform == platform,
+                DiscoveryCandidate.status == "relevant",
+            )
+            .order_by(DiscoveryCandidate.found_at.asc())
+            .limit(100)
+        ).all())
+        if disaster is None:
+            return HTMLResponse("Unknown disaster", status_code=404)
+
+        for candidate in candidates:
+            try:
+                source_text = ""
+                source_image_url = None
+                ocr_text = ""
+                if candidate.platform == "facebook":
+                    source_text = (await discover_public_post_text(candidate.url)) or ""
+                    source_image_url = await discover_public_post_image(candidate.url)
+                payload = await generate_openai_candidate_prefill(
+                    disaster,
+                    candidate,
+                    source_post_text=source_text,
+                    ocr_text=ocr_text,
+                    source_image_url=source_image_url,
+                )
+                notes = _source_notes_for_candidate(candidate, source_text, ocr_text)
+                for person_data in payload.get("people") or []:
+                    name = str(person_data.get("name") or "").strip()
+                    if not name:
+                        skipped += 1
+                        continue
+                    duplicate = db.scalar(select(Submission.id).where(
+                        Submission.disaster_id == disaster_id,
+                        Submission.social_url == candidate.url,
+                        func.lower(Submission.name) == name.casefold(),
+                        Submission.status != "rejected",
+                    ))
+                    existing_source = db.scalar(select(MissingPerson.id).join(Source).where(
+                        MissingPerson.disaster_id == disaster_id,
+                        MissingPerson.archived.is_(False),
+                        Source.url == candidate.url,
+                        func.lower(MissingPerson.name) == name.casefold(),
+                    ))
+                    if duplicate or existing_source or _exact_name_matches(db, disaster_id, name):
+                        skipped += 1
+                        continue
+                    db.add(Submission(
+                        disaster_id=disaster_id,
+                        kind="missing_report",
+                        status="pending",
+                        name=name,
+                        name_ne=str(person_data.get("name_ne") or "").strip() or None,
+                        age=parse_int(person_data.get("age")),
+                        gender=_normalize_gender(person_data.get("gender")),
+                        last_seen_date=parse_date(person_data.get("last_seen_date")),
+                        last_seen_time=parse_time(person_data.get("last_seen_time")),
+                        last_seen_location=str(person_data.get("last_seen_location") or "").strip() or None,
+                        clothing=str(person_data.get("clothing") or "").strip() or None,
+                        identification_details=str(person_data.get("identification_details") or "").strip() or None,
+                        public_contact_number=str(person_data.get("public_contact_number") or "").strip() or None,
+                        social_url=candidate.url,
+                        notes=notes,
+                    ))
+                    created += 1
+                candidate.status = "reviewed"
+            except Exception as exc:
+                failed += 1
+                audit(db, request, "batch_ai_prefill_failed", "discovery_candidate", candidate.id, str(exc)[:500])
+        audit(db, request, "batch_ai_prefill_relevant", "disaster", disaster_id, f"created={created}; skipped={skipped}; failed={failed}")
+        db.commit()
+
+    return RedirectResponse(
+        "/admin/discovery?" + urlencode({
+            "disaster_id": disaster_id,
+            "platform": platform,
+            "view": "relevant",
+            "batch_prefilled": created,
+            "batch_skipped": skipped,
+            "batch_failed": failed,
+        }),
+        status_code=303,
+    )
 
 
 @router.get("/admin/discovery/{candidate_id}/public-details")
