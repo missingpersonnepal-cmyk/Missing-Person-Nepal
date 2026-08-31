@@ -4,8 +4,7 @@
 <p class="muted">Search reports consolidated during an active disaster. Public entries have been reviewed before publication.</p>
 <form method="get" class="card">
   <div class="inline">
-    <div><label>Name or location</label><input name="q" value="{{ q }}" placeholder="Name, Nepali name, location"></div>
-    <div><label>Location filter</label><input name="location" value="{{ location }}" placeholder="Timure, Rasuwa..."></div>
+    <div><label>Search cases</label><input name="q" value="{{ q }}" placeholder="Name, Nepali name, or case number"></div>
     <div><label>Disaster</label><select name="disaster_id"><option value="">All</option>{% for d in disasters %}<option value="{{ d.id }}" {% if selected_disaster == d.id %}selected{% endif %}>{{ d.name }}</option>{% endfor %}</select></div>
     <div><button type="submit">Search</button></div>
   </div>

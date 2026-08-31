@@ -6,7 +6,7 @@ from sqlalchemy.orm import selectinload
 
 from .database import SessionLocal
 from .models import Disaster, MissingPerson, PersonCaseState
-from .services.geo import geocode
+from .services.geo import geocode, geocode_results
 
 router = APIRouter(prefix="/api/v1", tags=["public"])
 
@@ -64,6 +64,16 @@ def events():
             }
             for d in rows
         ]
+
+
+@router.get("/places")
+def places(q: str = Query(..., min_length=2, max_length=120)):
+    """Return safe place suggestions for location fields."""
+    try:
+        results = geocode_results(q)
+    except Exception:
+        results = []
+    return [{"label": item.label or q, "lat": item.lat, "lon": item.lon} for item in results]
 
 
 @router.get("/people")

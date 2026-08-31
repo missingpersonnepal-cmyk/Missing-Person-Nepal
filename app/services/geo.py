@@ -33,24 +33,32 @@ def _headers() -> dict[str, str]:
     return {"X-Api-Key": settings.geo_api_key.strip()}
 
 
-def geocode(query: str) -> GeoPoint | None:
+def geocode_results(query: str, limit: int = 5) -> list[GeoPoint]:
     if not settings.geo_api_key.strip() or not query.strip():
-        return None
+        return []
     url = f"{settings.geo_api_base_url}/api/geo/geocode"
     with httpx.Client(timeout=15.0) as client:
-        response = client.get(url, params={"query": query, "limit": 1, "language": "en"}, headers=_headers())
+        response = client.get(url, params={"query": query, "limit": max(1, min(limit, 10)), "language": "en"}, headers=_headers())
         response.raise_for_status()
         data = response.json()
     items = data if isinstance(data, list) else data.get("results") if isinstance(data, dict) else None
-    if not items:
-        return None
-    first = items[0]
-    lat = first.get("lat") or first.get("latitude")
-    lon = first.get("lon") or first.get("lng") or first.get("longitude")
-    if lat is None or lon is None:
-        return None
-    label = first.get("display_name") or first.get("name") or first.get("label")
-    return GeoPoint(lat=float(lat), lon=float(lon), label=label)
+    results: list[GeoPoint] = []
+    for item in items or []:
+        lat = item.get("lat") or item.get("latitude")
+        lon = item.get("lon") or item.get("lng") or item.get("longitude")
+        if lat is None or lon is None:
+            continue
+        results.append(GeoPoint(
+            lat=float(lat),
+            lon=float(lon),
+            label=item.get("display_name") or item.get("name") or item.get("label"),
+        ))
+    return results
+
+
+def geocode(query: str) -> GeoPoint | None:
+    results = geocode_results(query, limit=1)
+    return results[0] if results else None
 
 
 def reverse_geocode(lat: float, lon: float) -> str | None:

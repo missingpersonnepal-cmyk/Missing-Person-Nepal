@@ -46,7 +46,7 @@ def public_person_photo(case_number: str):
 
 
 @router.get("/", response_class=HTMLResponse)
-def home(request: Request, q: str = "", location: str = "", disaster_id: int | None = None):
+def home(request: Request, q: str = "", disaster_id: int | None = None):
     with SessionLocal() as db:
         disasters = list(db.scalars(select(Disaster).order_by(Disaster.active.desc(), Disaster.start_date.desc())).all())
         if disaster_id is None and disasters:
@@ -71,11 +71,10 @@ def home(request: Request, q: str = "", location: str = "", disaster_id: int | N
                 or_(
                     MissingPerson.name.ilike(pattern),
                     MissingPerson.name_ne.ilike(pattern),
+                    MissingPerson.case_number.ilike(pattern),
                     MissingPerson.last_seen_location.ilike(pattern),
                 )
             )
-        if location.strip():
-            stmt = stmt.where(MissingPerson.last_seen_location.ilike(f"%{location.strip()}%"))
         people = list(db.scalars(stmt.limit(250)).all())
         return render(
             request,
@@ -84,7 +83,6 @@ def home(request: Request, q: str = "", location: str = "", disaster_id: int | N
             selected_disaster=disaster_id,
             people=people,
             q=q,
-            location=location,
         )
 
 

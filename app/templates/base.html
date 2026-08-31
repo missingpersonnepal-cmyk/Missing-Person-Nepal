@@ -37,5 +37,27 @@
   {% endif %}
   {% block content %}{% endblock %}
 </main>
+<script>
+document.querySelectorAll('[data-place-search]').forEach((input) => {
+  let timer;
+  input.addEventListener('input', () => {
+    clearTimeout(timer);
+    const list = document.getElementById(input.getAttribute('list'));
+    if (!list || input.value.trim().length < 2) return;
+    timer = setTimeout(async () => {
+      try {
+        const response = await fetch('/api/v1/places?q=' + encodeURIComponent(input.value.trim()));
+        if (!response.ok) return;
+        const places = await response.json();
+        list.replaceChildren(...places.map((place) => {
+          const option = document.createElement('option');
+          option.value = place.label;
+          return option;
+        }));
+      } catch (_) { /* Keep manual entry available when the provider is unavailable. */ }
+    }, 300);
+  });
+});
+</script>
 </body>
 </html>
