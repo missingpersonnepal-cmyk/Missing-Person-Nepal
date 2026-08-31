@@ -63,6 +63,7 @@ from ..services.priority_sources import (
     user_source_seeds,
 )
 from ..services.share_cards import build_share_card
+from ..services.jobs import get as get_job, submit as submit_job
 from .common import admin_gate, audit, current_admin, next_case_number, parse_date, parse_int, parse_time, render, role_gate
 
 router = APIRouter()
@@ -1568,6 +1569,7 @@ def discovery_page(
     batch_prefilled: int | None = None,
     batch_skipped: int | None = None,
     batch_failed: int | None = None,
+    job_id: str | None = None,
 ):
     gate = admin_gate(request)
     if gate:
@@ -1789,6 +1791,7 @@ def discovery_page(
             batch_prefilled=batch_prefilled,
             batch_skipped=batch_skipped,
             batch_failed=batch_failed,
+            job_id=job_id,
             pipeline_counts=pipeline_counts,
         )
 
@@ -1827,64 +1830,30 @@ async def wide_discovery_run(
         form.get("disaster_id")
     )
 
-    with SessionLocal() as db:
-        disaster = (
-            db.get(
-                Disaster,
-                disaster_id,
-            )
-            if disaster_id
-            else None
-        )
+    if not disaster_id:
+        return RedirectResponse("/admin/discovery", status_code=303)
+    def run_job():
+        with SessionLocal() as db:
+            disaster = db.get(Disaster, disaster_id)
+            if disaster is None:
+                raise RuntimeError("Unknown disaster")
+            stats = run_wide_discovery(db, disaster)
+            audit(db, request, "run_wide_discovery", "disaster", disaster.id, f"queries={stats['queries']}; raw={stats['raw_results']}; needs_ai={stats['needs_ai']}")
+            db.commit()
+            return {"queries": stats["queries"], "raw": stats["raw_results"], "added": stats["needs_ai"]}
+    job = submit_job("wide_discovery", run_job)
+    return RedirectResponse(f"/admin/discovery?disaster_id={disaster_id}&platform=facebook&job_id={job.id}", status_code=303)
 
-        if disaster is None:
-            return RedirectResponse(
-                "/admin/discovery",
-                status_code=303,
-            )
 
-        try:
-            stats = run_wide_discovery(
-                db,
-                disaster,
-            )
-        except SearchProviderUnavailable:
-            return RedirectResponse(
-                (
-                    "/admin/discovery"
-                    f"?disaster_id={disaster_id}"
-                    "&platform=facebook"
-                    "&wide_error=1"
-                ),
-                status_code=303,
-            )
-
-        audit(
-            db,
-            request,
-            "run_wide_discovery",
-            "disaster",
-            disaster.id,
-            (
-                f"queries={stats['queries']}; "
-                f"raw={stats['raw_results']}; "
-                f"needs_ai={stats['needs_ai']}"
-            ),
-        )
-
-        db.commit()
-
-    return RedirectResponse(
-        (
-            "/admin/discovery"
-            f"?disaster_id={disaster_id}"
-            "&platform=facebook"
-            f"&wide_queries={stats['queries']}"
-            f"&wide_raw={stats['raw_results']}"
-            f"&wide_added={stats['needs_ai']}"
-        ),
-        status_code=303,
-    )
+@router.get("/admin/jobs/{job_id}")
+def admin_job_status(request: Request, job_id: str):
+    gate = admin_gate(request)
+    if gate:
+        return gate
+    job = get_job(job_id)
+    if job is None:
+        return JSONResponse({"error": "not found"}, status_code=404)
+    return JSONResponse({"id": job.id, "kind": job.kind, "status": job.status, "result": job.result, "error": job.error})
 
 
 @router.post("/admin/discovery/search-tags")

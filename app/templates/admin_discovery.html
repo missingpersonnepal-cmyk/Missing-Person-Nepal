@@ -8,6 +8,7 @@
 {% if batch_prefilled is not none %}
 <div class="notice"><strong>AI prefill finished.</strong> {{ batch_prefilled }} pending case(s) created for review{% if batch_skipped %}, {{ batch_skipped }} skipped as duplicates or incomplete{% endif %}{% if batch_failed %}, {{ batch_failed }} source(s) failed and remain available{% endif %}. <a href="/admin/submissions">Open pending cases</a></div>
 {% endif %}
+{% if job_id %}<div class="notice" id="job-status">Wide discovery queued. This page will update when processing finishes.</div><script>(async()=>{const box=document.getElementById('job-status'); for(let i=0;i<180;i++){await new Promise(r=>setTimeout(r,1000)); const r=await fetch('/admin/jobs/{{ job_id }}'); if(!r.ok)return; const j=await r.json(); if(j.status==='complete'){box.textContent=`Wide discovery finished: ${j.result.added||0} new candidates.`; return;} if(j.status==='failed'){box.textContent='Wide discovery failed: '+(j.error||'unknown error'); return;} box.textContent='Wide discovery '+j.status+'...';}})();</script>{% endif %}
 {# Legacy section names retained for regression compatibility: Custom Search Tags / Phrases; Generated priority source searches. #}
 <p class="muted">Public-index discovery only. Review a finding before it becomes a missing-person case.</p>
 <span style="display:none">Generated priority source searches · Missing-Person Sharer / Group Finder · Custom Search Tags / Phrases · Full public post text / additional context</span>
