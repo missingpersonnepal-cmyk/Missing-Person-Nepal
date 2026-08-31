@@ -5,7 +5,7 @@ from sqlalchemy import func, or_, select
 from sqlalchemy.orm import selectinload
 
 from .database import SessionLocal
-from .models import Disaster, MissingPerson, PersonCaseState
+from .models import Disaster, Facility, MissingPerson, PersonCaseState
 from .services.geo import geocode, geocode_results
 
 router = APIRouter(prefix="/api/v1", tags=["public"])
@@ -25,6 +25,7 @@ def person_payload(person: MissingPerson, include_sources: bool = False, case_st
         "last_seen_location": person.last_seen_location,
         "last_seen_lat": person.last_seen_lat,
         "last_seen_lon": person.last_seen_lon,
+        "location_uncertain": person.location_uncertain,
         "clothing": person.clothing,
         "identification_details": person.identification_details,
         "public_contact_number": person.public_contact_number,
@@ -74,6 +75,13 @@ def places(q: str = Query(..., min_length=2, max_length=120)):
     except Exception:
         results = []
     return [{"label": item.label or q, "lat": item.lat, "lon": item.lon} for item in results]
+
+
+@router.get("/facilities")
+def facilities():
+    with SessionLocal() as db:
+        rows = db.scalars(select(Facility).where(Facility.active.is_(True)).order_by(Facility.name)).all()
+        return [{"id": f.id, "name": f.name, "type": f.facility_type, "address": f.address, "contact": f.contact, "capacity": f.capacity, "lat": f.lat, "lon": f.lon} for f in rows]
 
 
 @router.get("/people")

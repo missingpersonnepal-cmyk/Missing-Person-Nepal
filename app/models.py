@@ -33,6 +33,21 @@ class Disaster(Base):
         return [x.strip() for x in self.affected_locations.splitlines() if x.strip()]
 
 
+class Facility(Base):
+    __tablename__ = "mp_facilities"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    name: Mapped[str] = mapped_column(String(255), index=True)
+    facility_type: Mapped[str] = mapped_column(String(40), index=True)
+    address: Mapped[str | None] = mapped_column(Text, nullable=True)
+    contact: Mapped[str | None] = mapped_column(String(120), nullable=True)
+    capacity: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    lat: Mapped[float] = mapped_column(Float)
+    lon: Mapped[float] = mapped_column(Float)
+    active: Mapped[bool] = mapped_column(Boolean, default=True, index=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
+
+
 class MissingPerson(Base):
     __tablename__ = "mp_missing_people"
 

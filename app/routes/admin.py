@@ -15,6 +15,7 @@ from ..config import settings
 from ..database import SessionLocal
 from ..models import (
     AdminUser, CaseTimeline, Disaster, DiscoveryCandidate, DiscoverySearchTag,
+    Facility,
     PersonPhoto,
     DiscoverySourceSeed, MissingPerson, NotificationOutbox,
     NotificationSubscription, PersonCaseState, Source, Submission, utcnow,
@@ -624,7 +625,52 @@ def admin_events(request: Request):
         return gate
     with SessionLocal() as db:
         disasters = list(db.scalars(select(Disaster).order_by(Disaster.start_date.desc())).all())
-        return render(request, "admin_events.html", disasters=disasters, error=None)
+    return render(request, "admin_events.html", disasters=disasters, error=None)
+
+
+@router.get("/admin/facilities", response_class=HTMLResponse)
+def admin_facilities(request: Request):
+    gate = admin_gate(request)
+    if gate:
+        return gate
+    with SessionLocal() as db:
+        facilities = list(db.scalars(select(Facility).order_by(Facility.active.desc(), Facility.name)).all())
+    return render(request, "admin_facilities.html", facilities=facilities)
+
+
+@router.post("/admin/facilities")
+async def admin_facility_create(request: Request):
+    gate = role_gate(request, {"super_admin", "admin", "data_entry"})
+    if gate:
+        return gate
+    form = await request.form()
+    name = str(form.get("name") or "").strip()
+    lat = str(form.get("lat") or "").strip()
+    lon = str(form.get("lon") or "").strip()
+    if not name or not parse_coords(f"{lat},{lon}"):
+        return RedirectResponse("/admin/facilities", status_code=303)
+    with SessionLocal() as db:
+        point = parse_coords(f"{lat},{lon}")
+        facility = Facility(name=name, facility_type=str(form.get("facility_type") or "rescue_center").strip(), address=str(form.get("address") or "").strip() or None, contact=str(form.get("contact") or "").strip() or None, capacity=parse_int(form.get("capacity")), lat=point.lat, lon=point.lon, active=True)
+        db.add(facility)
+        db.flush()
+        audit(db, request, "create_facility", "facility", facility.id, facility.name)
+        db.commit()
+    return RedirectResponse("/admin/facilities", status_code=303)
+
+
+@router.post("/admin/facilities/{facility_id}/toggle")
+def admin_facility_toggle(request: Request, facility_id: int):
+    gate = role_gate(request, {"super_admin", "admin"})
+    if gate:
+        return gate
+    with SessionLocal() as db:
+        facility = db.get(Facility, facility_id)
+        if facility:
+            facility.active = not facility.active
+            audit(db, request, "toggle_facility", "facility", facility.id, str(facility.active))
+            db.commit()
+    return RedirectResponse("/admin/facilities", status_code=303)
 
 
 @router.post("/admin/events")

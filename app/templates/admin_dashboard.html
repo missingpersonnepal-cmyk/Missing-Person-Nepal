@@ -108,6 +108,10 @@
   const peopleAll = activeEvent ? await fetch(`/api/v1/people?disaster_id=${activeEvent.id}&status=all&limit=250`).then(r => r.json()) : [];
   const map = L.map('admin-map', { scrollWheelZoom: false });
   L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', { maxZoom: 18, attribution: '&copy; OpenStreetMap contributors' }).addTo(map);
+  const facilityLayer = L.layerGroup().addTo(map);
+  fetch('/api/v1/facilities').then(r => r.json()).then(facilities => facilities.forEach(f => {
+    L.circleMarker([f.lat, f.lon], {radius:8, color:'#b92d27', fillColor:'#f0a24b', fillOpacity:.9}).bindPopup(`<strong>${f.name}</strong><br>${f.type}<br>${f.address || ''}<br>${f.contact || ''}`).addTo(facilityLayer);
+  })).catch(() => {});
   const clusterLayer = L.markerClusterGroup();
   const heatLayer = L.heatLayer([], { radius: 24, blur: 18, maxZoom: 12 });
   const drawLayer = new L.FeatureGroup().addTo(map);
@@ -131,7 +135,7 @@
       if (person.last_seen_lat == null || person.last_seen_lon == null) return;
       const ll = [person.last_seen_lat, person.last_seen_lon];
       const statusLabel = person.case_status ? person.case_status.toUpperCase() : 'UNKNOWN';
-      const marker = L.marker(ll).bindPopup(`<strong>${person.name}</strong><br>${person.case_number}<br>${statusLabel}<br>${person.last_seen_location || ''}<br><span class="muted">Resolving place label...</span><br><a href="/person/${person.case_number}">Open case</a>`);
+      const marker = (person.location_uncertain ? L.circleMarker(ll, {radius:9, color:'#b7791f', dashArray:'4 3'}): L.marker(ll)).bindPopup(`<strong>${person.name}</strong><br>${person.case_number}<br>${statusLabel}<br>${person.last_seen_location || ''}${person.location_uncertain ? '<br><strong>Location uncertain</strong>' : ''}<br><span class="muted">Resolving place label...</span><br><a href="/person/${person.case_number}">Open case</a>`);
       marker.person = person;
       markers.push(marker);
       fetch(`/admin/geo/reverse?lat=${person.last_seen_lat}&lon=${person.last_seen_lon}`).then(r => r.json()).then(data => {
