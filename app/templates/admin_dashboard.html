@@ -4,6 +4,9 @@
   <div><div class="eyebrow">Operations command center</div><h1>Admin Dashboard</h1><p class="muted">Work from left to right: triage sources, extract relevant reports, resolve duplicates, approve records, then publish.</p></div>
   <div class="inline">
     <a class="button" href="/admin/discovery">Open Discovery</a>
+    <form method="post" action="/admin/geo/backfill" style="display:inline">
+      <button class="secondary" type="submit">Backfill map pins</button>
+    </form>
     <button class="secondary" type="button" id="print-map-btn">Print / Save PDF</button>
   </div>
 </div>

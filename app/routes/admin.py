@@ -252,6 +252,28 @@ def _geo_point_for_text(text: str) -> GeoPoint | None:
     return geocode(text)
 
 
+def _backfill_published_person_coords(db) -> int:
+    """Fill missing coordinates for published cases using last-seen text."""
+    updated = 0
+    rows = db.scalars(
+        select(MissingPerson).where(
+            MissingPerson.published.is_(True),
+            MissingPerson.archived.is_(False),
+            MissingPerson.last_seen_lat.is_(None),
+            MissingPerson.last_seen_lon.is_(None),
+            MissingPerson.last_seen_location.is_not(None),
+        )
+    ).all()
+    for person in rows:
+        point = _geo_point_for_text(person.last_seen_location or "")
+        if not point:
+            continue
+        person.last_seen_lat = point.lat
+        person.last_seen_lon = point.lon
+        updated += 1
+    return updated
+
+
 @router.get("/admin/geo/reverse")
 def admin_geo_reverse(request: Request, lat: float, lon: float):
     gate = admin_gate(request)
@@ -270,6 +292,17 @@ def admin_geo_route(request: Request, origin: str, destination: str, mode: str =
         return JSONResponse(geo_route(origin=origin, destination=destination, mode=mode))
     except Exception as exc:
         return JSONResponse({"error": str(exc)}, status_code=502)
+
+
+@router.post("/admin/geo/backfill")
+def admin_geo_backfill(request: Request):
+    gate = admin_gate(request)
+    if gate:
+        return gate
+    with SessionLocal() as db:
+        updated = _backfill_published_person_coords(db)
+        db.commit()
+    return RedirectResponse(f"/admin?geo_backfilled={updated}", status_code=303)
 
 
 @router.get("/admin/media/{filename}")
