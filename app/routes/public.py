@@ -143,7 +143,10 @@ async def submit_report(request: Request):
             photo_path = await save_image(form.get("photo"), settings.upload_dir)
         except ValueError as exc:
             return render(request, "report.html", disasters=disasters, error=str(exc), success=None)
-        point = _geo_point_for_text(last_seen_location)
+        selected_point = parse_coords(
+            f"{form.get('last_seen_lat') or ''},{form.get('last_seen_lon') or ''}"
+        )
+        point = selected_point or _geo_point_for_text(last_seen_location)
 
         social_url = canonicalize_url(str(form.get("social_url") or "")) or None
         submission = Submission(

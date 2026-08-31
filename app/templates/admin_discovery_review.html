@@ -362,6 +362,8 @@
   <label>Last-seen / affected location *</label>
   <input id="person-location" name="last_seen_location" value="{{ prefill.last_seen_location or '' }}" list="place-suggestions" data-place-search required>
   <datalist id="place-suggestions"></datalist>
+  <input type="hidden" name="last_seen_lat" id="person-lat"><input type="hidden" name="last_seen_lon" id="person-lon">
+  <div id="person-map" class="location-picker" data-map-picker data-lat-input="person-lat" data-lon-input="person-lon" data-location-input="person-location"></div>
 
   <label>Clothing</label>
   <textarea id="person-clothing" name="clothing">{{ prefill.clothing or '' }}</textarea>

@@ -6,6 +6,8 @@
   <title>{% block title %}Nepal Disaster Missing Persons Hub{% endblock %}</title>
   <link rel="stylesheet" href="/static/style.css">
   <link rel="stylesheet" href="/static/admin.css">
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
 </head>
 <body>
 <header>
@@ -56,6 +58,23 @@ document.querySelectorAll('[data-place-search]').forEach((input) => {
         }));
       } catch (_) { /* Keep manual entry available when the provider is unavailable. */ }
     }, 300);
+  });
+});
+document.querySelectorAll('[data-map-picker]').forEach((mapElement) => {
+  const latInput = document.getElementById(mapElement.dataset.latInput);
+  const lonInput = document.getElementById(mapElement.dataset.lonInput);
+  const locationInput = document.getElementById(mapElement.dataset.locationInput);
+  if (!latInput || !lonInput || !locationInput || !window.L) return;
+  const lat = Number(latInput.value) || 28.3949;
+  const lon = Number(lonInput.value) || 84.1240;
+  const map = L.map(mapElement).setView([lat, lon], latInput.value ? 13 : 7);
+  L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', { attribution: '&copy; OpenStreetMap contributors' }).addTo(map);
+  let marker = latInput.value ? L.marker([lat, lon]).addTo(map) : null;
+  map.on('click', async (event) => {
+    const point = event.latlng;
+    latInput.value = point.lat.toFixed(6); lonInput.value = point.lng.toFixed(6);
+    if (marker) marker.setLatLng(point); else marker = L.marker(point).addTo(map);
+    try { const response = await fetch('/api/v1/places?q=' + encodeURIComponent(`${point.lat},${point.lng}`)); const places = response.ok ? await response.json() : []; if (places[0]?.label) locationInput.value = places[0].label; } catch (_) {}
   });
 });
 </script>

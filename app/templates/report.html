@@ -11,7 +11,9 @@
   <label>Recent photo</label><input name="photo" type="file" accept="image/jpeg,image/png,image/webp">
   <label>Residential address (private/admin only)</label><textarea name="residential_address"></textarea>
   <div class="inline"><div><label>Last-seen date</label><input name="last_seen_date" type="date"></div><div><label>Last-seen time</label><input name="last_seen_time" type="time"></div></div>
-  <label>Last-seen location *</label><input name="last_seen_location" list="report-place-suggestions" data-place-search required><datalist id="report-place-suggestions"></datalist>
+  <label>Last-seen location *</label><input id="report-location" name="last_seen_location" list="report-place-suggestions" data-place-search required><datalist id="report-place-suggestions"></datalist>
+  <input type="hidden" name="last_seen_lat" id="report-lat"><input type="hidden" name="last_seen_lon" id="report-lon">
+  <div id="report-map" class="location-picker" data-map-picker data-lat-input="report-lat" data-lon-input="report-lon" data-location-input="report-location"></div>
   <label>Clothing last worn</label><textarea name="clothing"></textarea>
   <label>Identification details</label><textarea name="identification_details" placeholder="Height, build, glasses, scars, carried items, etc."></textarea>
   <label>Public contact number for information</label><input name="public_contact_number">
