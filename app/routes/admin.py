@@ -2,6 +2,7 @@ from __future__ import annotations
 from app.services.search_providers import serper_status
 
 from pathlib import Path
+import json
 from urllib.parse import urlencode
 
 from fastapi import APIRouter, Request
@@ -487,7 +488,35 @@ def admin_dashboard(request: Request):
             ) or 0,
         }
         disasters = list(db.scalars(select(Disaster).order_by(Disaster.start_date.desc())).all())
-        return render(request, "admin_dashboard.html", stats=stats, disasters=disasters)
+        active_disaster = next((d for d in disasters if d.active), disasters[0] if disasters else None)
+        map_people = []
+        if active_disaster is not None:
+            map_people = [
+                {
+                    "case_number": p.case_number,
+                    "name": p.name,
+                    "lat": p.last_seen_lat,
+                    "lon": p.last_seen_lon,
+                    "location": p.last_seen_location,
+                }
+                for p in db.scalars(
+                    select(MissingPerson).where(
+                        MissingPerson.disaster_id == active_disaster.id,
+                        MissingPerson.published.is_(True),
+                        MissingPerson.archived.is_(False),
+                        MissingPerson.last_seen_lat.is_not(None),
+                        MissingPerson.last_seen_lon.is_not(None),
+                    )
+                ).all()
+            ]
+        return render(
+            request,
+            "admin_dashboard.html",
+            stats=stats,
+            disasters=disasters,
+            active_disaster=active_disaster,
+            map_people_json=json.dumps(map_people),
+        )
 
 
 @router.get("/admin/help", response_class=HTMLResponse)

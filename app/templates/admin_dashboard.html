@@ -19,8 +19,47 @@
   <div class="metric-card"><span>New candidates</span><strong>{{ stats.candidates }}</strong></div>
 </div>
 <div class="grid dashboard-lower">
-  <section class="card"><div class="eyebrow">Active operations</div><h2>Disaster events</h2>{% for d in disasters %}<div class="event-row"><span><strong>{{ d.name }}</strong><small>{{ d.start_date }} · {{ d.disaster_type }}</small></span><span class="badge">{{ 'Active' if d.active else 'Inactive' }}</span></div>{% else %}<p>No disaster event is configured.</p><a class="button" href="/admin/events">Create the first event</a>{% endfor %}</section>
+  <section class="card">
+    <div class="eyebrow">Live map</div>
+    <h2>Event area and last-seen pins</h2>
+    <div id="admin-map" style="height:420px;border-radius:12px;overflow:hidden;background:#e7ece7"></div>
+    <p class="muted" style="margin-top:10px">Pins show published cases with saved coordinates. The shaded area is a lightweight circle around the active event center.</p>
+  </section>
+  <section class="card"><div class="eyebrow">Active operations</div><h2>Disaster events</h2>{% for d in disasters %}<div class="event-row"><span><strong>{{ d.name }}</strong><small>{{ d.start_date }} - {{ d.disaster_type }}</small></span><span class="badge">{{ 'Active' if d.active else 'Inactive' }}</span></div>{% else %}<p>No disaster event is configured.</p><a class="button" href="/admin/events">Create the first event</a>{% endfor %}</section>
   <section class="card"><div class="eyebrow">Shift checklist</div><h2>Before you finish</h2><ul class="checklist"><li>Review urgent and high-confidence sources first.</li><li>Attach repeat source posts to an existing published case.</li><li>Confirm public phone numbers and photos before publishing.</li><li>Move resolved cases to Found or Identified promptly.</li><li>Export an event handover file at the end of the shift.</li></ul><a href="/admin/export">Open secure exports</a></section>
   <section class="card"><div class="eyebrow">Training</div><h2>How to use the system</h2><p class="muted">Open the admin help hub for a plain-language walkthrough in English and Nepali, plus a slide deck you can share during handover.</p><div class="inline"><a class="button" href="/admin/help">Open help hub</a><a class="button secondary" href="/admin/help/manual.pptx">Download PPTX</a></div></section>
 </div>
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<script>
+(function () {
+  const active = {{ (active_disaster.center_lat if active_disaster else none)|tojson }}, activeLon = {{ (active_disaster.center_lon if active_disaster else none)|tojson }};
+  const people = {{ map_people_json|safe }};
+  const map = L.map('admin-map', { scrollWheelZoom: false });
+  const osm = L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+    maxZoom: 18,
+    attribution: '&copy; OpenStreetMap contributors'
+  }).addTo(map);
+  const bounds = [];
+  if (active !== null && activeLon !== null) {
+    const center = [active, activeLon];
+    L.circle(center, { radius: 9000, color: '#bb7a11', fillColor: '#f3a53a', fillOpacity: 0.16, weight: 2 }).addTo(map);
+    L.marker(center).addTo(map).bindPopup('Active disaster center');
+    bounds.push(center);
+  }
+  people.forEach((person) => {
+    if (person.lat == null || person.lon == null) return;
+    const point = [person.lat, person.lon];
+    L.marker(point).addTo(map).bindPopup(`<strong>${person.name}</strong><br>${person.case_number}<br>${person.location || ''}`);
+    bounds.push(point);
+  });
+  if (bounds.length) {
+    map.fitBounds(bounds, { padding: [30, 30] });
+  } else if (active !== null && activeLon !== null) {
+    map.setView([active, activeLon], 10);
+  } else {
+    map.setView([28.3949, 84.1240], 7);
+  }
+})();
+</script>
 {% endblock %}
