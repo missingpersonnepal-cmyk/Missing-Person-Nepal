@@ -12,7 +12,11 @@
   <div class="container site-header">
     <a class="brand" href="/"><span class="brand-mark">N</span><span class="brand-text">Nepal Missing Persons Hub</span></a>
     <nav class="primary-nav" aria-label="Primary navigation">
-      {% if request.session.get('admin') %}<a href="/admin">Admin workspace</a>{% endif %}
+      {% if request.session.get('admin') %}
+      <a href="/admin">Admin workspace</a>
+      {% else %}
+      <a href="/admin/login">Admin login</a>
+      {% endif %}
       <a class="nav-cta" href="/report">Report missing person</a>
     </nav>
   </div>
