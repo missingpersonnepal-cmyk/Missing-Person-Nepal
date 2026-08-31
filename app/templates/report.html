@@ -4,7 +4,7 @@
 <p>Provide the best information you have. A report is reviewed before it becomes public.</p>
 {% if error %}<div class="error">{{ error }}</div>{% endif %}
 {% if success %}<div class="notice">{{ success }}</div>{% endif %}
-<form method="post" enctype="multipart/form-data" class="card">
+<form method="post" enctype="multipart/form-data" class="card" id="report-form">
   <label>Disaster *</label><select name="disaster_id" required>{% for d in disasters %}<option value="{{ d.id }}">{{ d.name }}</option>{% endfor %}</select>
   <div class="inline"><div><label>Full name *</label><input name="name" required></div><div><label>Name in Nepali</label><input name="name_ne"></div></div>
   <div class="inline"><div><label>Age</label><input name="age" type="number" min="0" max="120"></div><div><label>Gender</label><input name="gender"></div></div>
@@ -22,4 +22,23 @@
   <label>Additional notes</label><textarea name="notes"></textarea>
   <button type="submit">Submit report</button>
 </form>
+<script>
+const reportForm = document.getElementById('report-form');
+const REPORT_QUEUE = 'missing-person-report-queue';
+function queuedReports() { try { return JSON.parse(localStorage.getItem(REPORT_QUEUE) || '[]'); } catch (_) { return []; } }
+async function flushReports() {
+  const queue = queuedReports();
+  for (const data of queue) { try { const response = await fetch('/report', {method:'POST', body:new URLSearchParams(data)}); if (!response.ok) return; } catch (_) { return; } }
+  localStorage.removeItem(REPORT_QUEUE);
+}
+window.addEventListener('online', flushReports);
+reportForm.addEventListener('submit', (event) => {
+  if (navigator.onLine) return;
+  event.preventDefault();
+  const data = Object.fromEntries(new FormData(reportForm));
+  delete data.photo;
+  const queue = queuedReports(); queue.push(data); localStorage.setItem(REPORT_QUEUE, JSON.stringify(queue));
+  alert('No connection. Your report details were saved on this device and will retry when you are online. Photos must be added after reconnecting.');
+});
+</script>
 {% endblock %}

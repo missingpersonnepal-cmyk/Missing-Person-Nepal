@@ -79,5 +79,8 @@ document.querySelectorAll('[data-map-picker]').forEach((mapElement) => {
   });
 });
 </script>
+<script>
+if ('serviceWorker' in navigator) navigator.serviceWorker.register('/static/service-worker.js').catch(() => {});
+</script>
 </body>
 </html>
