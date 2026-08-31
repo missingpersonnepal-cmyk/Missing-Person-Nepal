@@ -15,6 +15,7 @@ from ..config import settings
 from ..database import SessionLocal
 from ..models import (
     AdminUser, CaseTimeline, Disaster, DiscoveryCandidate, DiscoverySearchTag,
+    PersonPhoto,
     DiscoverySourceSeed, MissingPerson, NotificationOutbox,
     NotificationSubscription, PersonCaseState, Source, Submission, utcnow,
 )
@@ -796,6 +797,7 @@ def admin_person(request: Request, person_id: int):
                 for status in ("pending", "sent", "failed")
             },
             mask_destination=mask_destination,
+            photos=list(db.scalars(select(PersonPhoto).where(PersonPhoto.person_id == person.id).order_by(PersonPhoto.created_at.desc())).all()),
             timeline=list(db.scalars(
                 select(CaseTimeline)
                 .where(CaseTimeline.person_id == person.id)
@@ -853,6 +855,52 @@ async def admin_person_edit(request: Request, person_id: int):
         audit(db, request, "edit_person", "person", person.id)
         _add_case_timeline(db, request, person.id, "case_edited", "Case details updated")
         db.commit()
+    return RedirectResponse(f"/admin/people/{person_id}", status_code=303)
+
+
+@router.post("/admin/people/{person_id}/photos")
+async def admin_person_add_photo(request: Request, person_id: int):
+    gate = admin_gate(request)
+    if gate:
+        return gate
+    form = await request.form()
+    upload = form.get("photo")
+    with SessionLocal() as db:
+        person = db.get(MissingPerson, person_id)
+        if person is None:
+            return HTMLResponse("Not found", status_code=404)
+        try:
+            photo_path = await save_image(upload, settings.upload_dir)
+        except ValueError as exc:
+            return HTMLResponse(str(exc), status_code=400)
+        if not photo_path:
+            return RedirectResponse(f"/admin/people/{person_id}", status_code=303)
+        photo = PersonPhoto(
+            person_id=person_id,
+            photo_path=photo_path,
+            source=str(form.get("source") or "").strip() or None,
+            consent_confirmed=str(form.get("consent_confirmed") or "") == "1",
+            verified=False,
+            uploaded_by=str(request.session.get("admin") or "system"),
+        )
+        db.add(photo)
+        db.flush()
+        audit(db, request, "add_case_photo", "person_photo", photo.id, photo.source)
+        db.commit()
+    return RedirectResponse(f"/admin/people/{person_id}", status_code=303)
+
+
+@router.post("/admin/people/{person_id}/photos/{photo_id}/verify")
+def admin_person_verify_photo(request: Request, person_id: int, photo_id: int):
+    gate = role_gate(request, {"super_admin", "admin", "reviewer"})
+    if gate:
+        return gate
+    with SessionLocal() as db:
+        photo = db.get(PersonPhoto, photo_id)
+        if photo and photo.person_id == person_id:
+            photo.verified = True
+            audit(db, request, "verify_case_photo", "person_photo", photo.id)
+            db.commit()
     return RedirectResponse(f"/admin/people/{person_id}", status_code=303)
 
 

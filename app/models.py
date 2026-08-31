@@ -88,6 +88,19 @@ class Source(Base):
     person: Mapped[MissingPerson] = relationship(back_populates="sources")
 
 
+class PersonPhoto(Base):
+    __tablename__ = "mp_person_photos"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    person_id: Mapped[int] = mapped_column(ForeignKey("mp_missing_people.id"), index=True)
+    photo_path: Mapped[str] = mapped_column(Text)
+    source: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    consent_confirmed: Mapped[bool] = mapped_column(Boolean, default=False)
+    verified: Mapped[bool] = mapped_column(Boolean, default=False, index=True)
+    uploaded_by: Mapped[str] = mapped_column(String(100), default="system")
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
+
+
 class Submission(Base):
     __tablename__ = "mp_submissions"
 
