@@ -62,6 +62,7 @@ from ..services.share_cards import build_share_card
 from .common import admin_gate, audit, current_admin, next_case_number, parse_date, parse_int, parse_time, render, role_gate
 
 router = APIRouter()
+MANUAL_DECK_PATH = Path(__file__).resolve().parents[1] / "static" / "user_manual_bilingual.pptx"
 
 ADMIN_ROLES = {"super_admin", "admin", "reviewer"}
 ROLE_LABELS = {"super_admin": "Super Admin", "admin": "Admin", "reviewer": "Reviewer"}
@@ -479,6 +480,33 @@ def admin_dashboard(request: Request):
         }
         disasters = list(db.scalars(select(Disaster).order_by(Disaster.start_date.desc())).all())
         return render(request, "admin_dashboard.html", stats=stats, disasters=disasters)
+
+
+@router.get("/admin/help", response_class=HTMLResponse)
+def admin_help(request: Request):
+    gate = admin_gate(request)
+    if gate:
+        return gate
+    return render(
+        request,
+        "admin_help.html",
+        manual_deck_exists=MANUAL_DECK_PATH.exists(),
+        manual_deck_url="/admin/help/manual.pptx" if MANUAL_DECK_PATH.exists() else None,
+    )
+
+
+@router.get("/admin/help/manual.pptx")
+def admin_help_manual(request: Request):
+    gate = admin_gate(request)
+    if gate:
+        return gate
+    if not MANUAL_DECK_PATH.exists():
+        return HTMLResponse("Manual deck not found", status_code=404)
+    return FileResponse(
+        MANUAL_DECK_PATH,
+        media_type="application/vnd.openxmlformats-officedocument.presentationml.presentation",
+        filename="user_manual_bilingual.pptx",
+    )
 
 
 @router.get("/admin/events", response_class=HTMLResponse)

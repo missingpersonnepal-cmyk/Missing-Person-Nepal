@@ -1,0 +1,83 @@
+{% extends "base.html" %}
+{% block content %}
+<div class="page-heading">
+  <div>
+    <div class="eyebrow">Help center</div>
+    <h1>Help and Training</h1>
+    <p class="muted">Use this page to learn what the system does, how the workflow fits together, and how to brief another admin quickly.</p>
+  </div>
+  {% if manual_deck_url %}
+  <a class="button" href="{{ manual_deck_url }}">Download PPTX</a>
+  {% endif %}
+</div>
+
+<div class="grid dashboard-lower">
+  <section class="card">
+    <div class="eyebrow">What the system does</div>
+    <h2>English</h2>
+    <ul class="checklist">
+      <li>Collects public reports and direct submissions for disaster-related missing persons.</li>
+      <li>Keeps source links, notes, and evidence attached to the right person record.</li>
+      <li>Helps admins spot likely duplicates before publishing or merging cases.</li>
+      <li>Supports search, review, publishing, export, and shift handover in one place.</li>
+    </ul>
+  </section>
+
+  <section class="card">
+    <div class="eyebrow">यस प्रणालीले के गर्छ</div>
+    <h2>नेपाली</h2>
+    <ul class="checklist">
+      <li>विपद्‌सँग सम्बन्धित बेपत्ता व्यक्तिका सार्वजनिक रिपोर्ट र प्रत्यक्ष निवेदन सङ्कलन गर्छ।</li>
+      <li>स्रोत लिङ्क, नोट, र प्रमाण सही व्यक्ति रेकर्डसँग सुरक्षित राख्छ।</li>
+      <li>प्रकाशन वा मर्ज अघि सम्भावित duplicate पहिचान गर्न सहयोग गर्छ।</li>
+      <li>खोज, समीक्षा, प्रकाशन, export, र shift handover एउटै ठाउँमा समर्थन गर्छ।</li>
+    </ul>
+  </section>
+
+  <section class="card">
+    <div class="eyebrow">Workflow</div>
+    <h2>How to use it</h2>
+    <ol class="checklist">
+      <li>Create or select an event first.</li>
+      <li>Open Discovery and review candidate public sources.</li>
+      <li>Move relevant items into submissions and check duplicates.</li>
+      <li>Approve a new case or attach the source to an existing person.</li>
+      <li>Publish the case, keep it updated, and export handover files when needed.</li>
+    </ol>
+  </section>
+
+  <section class="card">
+    <div class="eyebrow">कार्यप्रवाह</div>
+    <h2>कसरी प्रयोग गर्ने</h2>
+    <ol class="checklist">
+      <li>पहिले event छान्नुहोस् वा नयाँ event बनाउनुहोस्।</li>
+      <li>Discovery खोलेर candidate सार्वजनिक स्रोतहरू समीक्षा गर्नुहोस्।</li>
+      <li>सम्बन्धित विवरण submissions मा सारेर duplicate जाँच गर्नुहोस्।</li>
+      <li>नयाँ केस approve गर्नुहोस् वा स्रोतलाई existing व्यक्ति सँग जोड्नुहोस्।</li>
+      <li>केस publish गरेर अपडेट राख्नुहोस्, र आवश्यक परे handover file export गर्नुहोस्।</li>
+    </ol>
+  </section>
+
+  <section class="card">
+    <div class="eyebrow">Admin tips</div>
+    <h2>Good practice</h2>
+    <ul class="checklist">
+      <li>Verify phone numbers, names, and locations before publishing.</li>
+      <li>Keep one source URL attached only once per person.</li>
+      <li>Use the shift checklist before handing over to the next admin.</li>
+      <li>When in doubt, save the evidence first and decide with a human review.</li>
+    </ul>
+  </section>
+
+  <section class="card">
+    <div class="eyebrow">व्यवहारिक सुझाव</div>
+    <h2>राम्रा अभ्यास</h2>
+    <ul class="checklist">
+      <li>प्रकाशन अघि फोन नम्बर, नाम, र स्थान जाँच गर्नुहोस्।</li>
+      <li>एउटै स्रोत URL एउटै व्यक्तिमा एक पटक मात्र जोड्नुहोस्।</li>
+      <li>अर्को admin लाई बुझाउन shift checklist प्रयोग गर्नुहोस्।</li>
+      <li>दुविधा भएमा पहिले प्रमाण सुरक्षित राख्नुहोस् र मानव समीक्षा गर्नुहोस्।</li>
+    </ul>
+  </section>
+</div>
+{% endblock %}
