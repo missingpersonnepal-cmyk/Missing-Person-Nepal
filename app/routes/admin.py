@@ -2,6 +2,7 @@ from __future__ import annotations
 from app.services.search_providers import serper_status
 
 from pathlib import Path
+from concurrent.futures import ThreadPoolExecutor
 import json
 from urllib.parse import urlencode
 
@@ -306,7 +307,6 @@ async def _candidate_prefill_payload(
 
 def _backfill_published_person_coords(db) -> int:
     """Fill missing coordinates for published cases using last-seen text."""
-    updated = 0
     rows = db.scalars(
         select(MissingPerson).where(
             MissingPerson.published.is_(True),
@@ -316,8 +316,21 @@ def _backfill_published_person_coords(db) -> int:
             MissingPerson.last_seen_location.is_not(None),
         )
     ).all()
+
+    locations = sorted({(person.last_seen_location or "").strip() for person in rows if (person.last_seen_location or "").strip()})
+
+    def safe_geocode(location: str):
+        try:
+            return location, _geo_point_for_text(location)
+        except Exception:
+            return location, None
+
+    with ThreadPoolExecutor(max_workers=5) as executor:
+        points = dict(executor.map(safe_geocode, locations))
+
+    updated = 0
     for person in rows:
-        point = _geo_point_for_text(person.last_seen_location or "")
+        point = points.get((person.last_seen_location or "").strip())
         if not point:
             continue
         person.last_seen_lat = point.lat

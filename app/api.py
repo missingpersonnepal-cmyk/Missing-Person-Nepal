@@ -6,7 +6,7 @@ from sqlalchemy.orm import selectinload
 
 from .database import SessionLocal
 from .models import Disaster, Facility, MissingPerson, PersonCaseState
-from .services.geo import geocode, geocode_results, reverse_geocode
+from .services.geo import geocode_results, reverse_geocode
 
 router = APIRouter(prefix="/api/v1", tags=["public"])
 
@@ -123,21 +123,8 @@ def people(
                 )
             )
         rows = db.scalars(stmt.limit(limit)).all()
-        mutated = False
-        for row in rows:
-            if (
-                row.last_seen_lat is None
-                or row.last_seen_lon is None
-            ) and row.last_seen_location:
-                point = geocode(row.last_seen_location)
-                if point:
-                    row.last_seen_lat = point.lat
-                    row.last_seen_lon = point.lon
-                    mutated = True
         state_rows = db.scalars(select(PersonCaseState).where(PersonCaseState.person_id.in_([p.id for p in rows]))).all()
         state_map = {row.person_id: row.status for row in state_rows}
-        if mutated:
-            db.commit()
         return [person_payload(p, case_status=state_map.get(p.id, "missing")) for p in rows]
 
 
