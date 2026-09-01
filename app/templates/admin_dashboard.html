@@ -93,14 +93,12 @@
   </section>
 </div>
 
-<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
-<link rel="stylesheet" href="https://unpkg.com/leaflet.markercluster@1.5.3/dist/MarkerCluster.css">
-<link rel="stylesheet" href="https://unpkg.com/leaflet.markercluster@1.5.3/dist/MarkerCluster.Default.css">
-<link rel="stylesheet" href="https://unpkg.com/leaflet-draw@1.0.4/dist/leaflet.draw.css">
-<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
-<script src="https://unpkg.com/leaflet.markercluster@1.5.3/dist/leaflet.markercluster.js"></script>
-<script src="https://unpkg.com/leaflet.heat@0.2.0/dist/leaflet-heat.js"></script>
-<script src="https://unpkg.com/leaflet-draw@1.0.4/dist/leaflet.draw.js"></script>
+<link rel="stylesheet" href="/static/vendor/leaflet-markercluster/MarkerCluster.css">
+<link rel="stylesheet" href="/static/vendor/leaflet-markercluster/MarkerCluster.Default.css">
+<link rel="stylesheet" href="/static/vendor/leaflet-draw/leaflet.draw.css">
+<script src="/static/vendor/leaflet-markercluster/leaflet.markercluster.js"></script>
+<script src="/static/vendor/leaflet-heat/leaflet-heat.js"></script>
+<script src="/static/vendor/leaflet-draw/leaflet.draw.js"></script>
 <script>
 (async function () {
   const events = await fetch('/api/v1/events').then(r => r.json());

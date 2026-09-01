@@ -6,7 +6,7 @@ from sqlalchemy.orm import selectinload
 
 from .database import SessionLocal
 from .models import Disaster, Facility, MissingPerson, PersonCaseState
-from .services.geo import geocode, geocode_results
+from .services.geo import geocode, geocode_results, reverse_geocode
 
 router = APIRouter(prefix="/api/v1", tags=["public"])
 
@@ -75,6 +75,16 @@ def places(q: str = Query(..., min_length=2, max_length=120)):
     except Exception:
         results = []
     return [{"label": item.label or q, "lat": item.lat, "lon": item.lon} for item in results]
+
+
+@router.get("/places/reverse")
+def place_reverse(lat: float, lon: float):
+    """Resolve a map click without exposing the provider API key."""
+    try:
+        label = reverse_geocode(lat, lon)
+    except Exception:
+        label = None
+    return {"label": label or f"{lat:.6f}, {lon:.6f}", "lat": lat, "lon": lon}
 
 
 @router.get("/facilities")

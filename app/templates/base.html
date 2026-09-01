@@ -6,8 +6,8 @@
   <title>{% block title %}Nepal Disaster Missing Persons Hub{% endblock %}</title>
   <link rel="stylesheet" href="/static/style.css">
   <link rel="stylesheet" href="/static/admin.css">
-  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
-  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+  <link rel="stylesheet" href="/static/vendor/leaflet/leaflet.css">
+  <script src="/static/vendor/leaflet/leaflet.js"></script>
 </head>
 <body>
 <header>
@@ -42,25 +42,46 @@
   {% block content %}{% endblock %}
 </main>
 <script>
+const mapPickersByLocationInput = new WeakMap();
+
 document.querySelectorAll('[data-place-search]').forEach((input) => {
   let timer;
+  let suggestions = [];
+
+  function applyExactSuggestion() {
+    const value = input.value.trim().toLocaleLowerCase();
+    const place = suggestions.find((item) => item.label.trim().toLocaleLowerCase() === value);
+    if (!place) return false;
+    const picker = mapPickersByLocationInput.get(input);
+    if (picker) picker.setPoint(place.lat, place.lon, true);
+    return true;
+  }
+
   input.addEventListener('input', () => {
     clearTimeout(timer);
     const list = document.getElementById(input.getAttribute('list'));
-    if (!list || input.value.trim().length < 2) return;
+    const picker = mapPickersByLocationInput.get(input);
+    if (picker) picker.clearCoordinates();
+    if (!list || input.value.trim().length < 2) {
+      suggestions = [];
+      if (list) list.replaceChildren();
+      return;
+    }
     timer = setTimeout(async () => {
       try {
         const response = await fetch('/api/v1/places?q=' + encodeURIComponent(input.value.trim()));
         if (!response.ok) return;
-        const places = await response.json();
-        list.replaceChildren(...places.map((place) => {
+        suggestions = await response.json();
+        list.replaceChildren(...suggestions.map((place) => {
           const option = document.createElement('option');
           option.value = place.label;
           return option;
         }));
+        applyExactSuggestion();
       } catch (_) { /* Keep manual entry available when the provider is unavailable. */ }
     }, 300);
   });
+  input.addEventListener('change', applyExactSuggestion);
 });
 document.querySelectorAll('[data-map-picker]').forEach((mapElement) => {
   const latInput = document.getElementById(mapElement.dataset.latInput);
@@ -72,11 +93,31 @@ document.querySelectorAll('[data-map-picker]').forEach((mapElement) => {
   const map = L.map(mapElement).setView([lat, lon], latInput.value ? 13 : 7);
   L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', { attribution: '&copy; OpenStreetMap contributors' }).addTo(map);
   let marker = latInput.value ? L.marker([lat, lon]).addTo(map) : null;
+
+  function setPoint(nextLat, nextLon, focus) {
+    const point = L.latLng(Number(nextLat), Number(nextLon));
+    latInput.value = point.lat.toFixed(6);
+    lonInput.value = point.lng.toFixed(6);
+    if (marker) marker.setLatLng(point); else marker = L.marker(point).addTo(map);
+    if (focus) map.setView(point, 14);
+  }
+
+  mapPickersByLocationInput.set(locationInput, {
+    setPoint,
+    clearCoordinates() {
+      latInput.value = '';
+      lonInput.value = '';
+    },
+  });
+
   map.on('click', async (event) => {
     const point = event.latlng;
-    latInput.value = point.lat.toFixed(6); lonInput.value = point.lng.toFixed(6);
-    if (marker) marker.setLatLng(point); else marker = L.marker(point).addTo(map);
-    try { const response = await fetch('/api/v1/places?q=' + encodeURIComponent(`${point.lat},${point.lng}`)); const places = response.ok ? await response.json() : []; if (places[0]?.label) locationInput.value = places[0].label; } catch (_) {}
+    setPoint(point.lat, point.lng, false);
+    try {
+      const response = await fetch(`/api/v1/places/reverse?lat=${encodeURIComponent(point.lat)}&lon=${encodeURIComponent(point.lng)}`);
+      const place = response.ok ? await response.json() : null;
+      if (place?.label) locationInput.value = place.label;
+    } catch (_) {}
   });
 });
 </script>

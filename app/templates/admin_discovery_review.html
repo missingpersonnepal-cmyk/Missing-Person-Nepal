@@ -98,8 +98,12 @@
   </div>
   {% else %}
   <div class="notice">
-    <strong>Backend AI Prefill is not configured.</strong>
-    {{ openai_prefill_status.detail }}
+    <strong>OpenAI is not configured.</strong>
+    The local evidence extractor can still prefill one safely detected person. Add <code>OPENAI_API_KEY</code> in Render to extract multiple people and more complex details in one pass.
+  </div>
+  <div class="inline">
+    <button type="button" id="run-openai-prefill">Prefill from Available Evidence</button>
+    <span id="openai-prefill-status" class="muted"></span>
   </div>
   {% endif %}
 

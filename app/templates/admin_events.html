@@ -35,10 +35,8 @@
   {% endfor %}
 </div>
 </div>
-<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
-<link rel="stylesheet" href="https://unpkg.com/leaflet-draw@1.0.4/dist/leaflet.draw.css">
-<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
-<script src="https://unpkg.com/leaflet-draw@1.0.4/dist/leaflet.draw.js"></script>
+<link rel="stylesheet" href="/static/vendor/leaflet-draw/leaflet.draw.css">
+<script src="/static/vendor/leaflet-draw/leaflet.draw.js"></script>
 <script>
 (async function () {
   const events = await fetch('/api/v1/events').then(r => r.json());

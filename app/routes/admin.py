@@ -270,6 +270,40 @@ def _geo_point_for_text(text: str) -> GeoPoint | None:
     return geocode(text)
 
 
+async def _candidate_prefill_payload(
+    disaster: Disaster,
+    candidate: DiscoveryCandidate,
+    *,
+    source_post_text: str = "",
+    ocr_text: str = "",
+    source_image_url: str | None = None,
+) -> dict:
+    """Use OpenAI when configured, otherwise return the safe local extractor."""
+    if openai_prefill_status().available:
+        return await generate_openai_candidate_prefill(
+            disaster,
+            candidate,
+            source_post_text=source_post_text,
+            ocr_text=ocr_text,
+            source_image_url=source_image_url,
+        )
+
+    person = extract_candidate_prefill(
+        candidate,
+        disaster,
+        source_text=source_post_text,
+        ocr_text=ocr_text,
+    )
+    people = [person] if str(person.get("name") or "").strip() else []
+    return {
+        "people": people,
+        "source_notes": "Local evidence extractor used; review every field before saving.",
+        "model": "local-evidence-rules",
+        "usage": {"input_tokens": 0, "output_tokens": 0},
+        "fallback": True,
+    }
+
+
 def _backfill_published_person_coords(db) -> int:
     """Fill missing coordinates for published cases using last-seen text."""
     updated = 0
@@ -2256,7 +2290,7 @@ async def discovery_ai_prefill_relevant(request: Request):
                 if candidate.platform == "facebook":
                     source_text = (await discover_public_post_text(candidate.url)) or ""
                     source_image_url = await discover_public_post_image(candidate.url)
-                payload = await generate_openai_candidate_prefill(
+                payload = await _candidate_prefill_payload(
                     disaster,
                     candidate,
                     source_post_text=source_text,
@@ -2626,7 +2660,7 @@ async def discovery_openai_prefill(request: Request, candidate_id: int):
                     pass
 
         try:
-            payload = await generate_openai_candidate_prefill(
+            payload = await _candidate_prefill_payload(
                 disaster,
                 candidate,
                 source_post_text=source_post_text,
