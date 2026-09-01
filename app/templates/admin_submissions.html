@@ -234,9 +234,12 @@
     action="/admin/submissions/{{ s.id }}/approve-new"
     style="display:inline"
   >
-    <input type="hidden" name="publish" value="1">
+    <label style="display:inline-flex;align-items:center;gap:6px;margin-right:8px">
+      <input type="checkbox" name="publish" value="1" checked>
+      Publish after review
+    </label>
     <button>
-      Approve & Publish
+      Save Review
     </button>
   </form>
   {% endif %}
