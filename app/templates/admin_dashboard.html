@@ -106,7 +106,14 @@
   const activeEvent = events.find(e => e.active) || events[0] || null;
   const peopleAll = activeEvent ? await fetch(`/api/v1/people?disaster_id=${activeEvent.id}&status=all&limit=250`).then(r => r.json()) : [];
   const map = L.map('admin-map', { scrollWheelZoom: false });
-  L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', { maxZoom: 18, attribution: '&copy; OpenStreetMap contributors' }).addTo(map);
+  let baseTiles = L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', { maxZoom: 18, attribution: '&copy; OpenStreetMap contributors' }).addTo(map);
+  let tileErrors = 0;
+  baseTiles.on('tileerror', () => {
+    tileErrors += 1;
+    if (tileErrors < 3 || baseTiles.options.fallback) return;
+    map.removeLayer(baseTiles);
+    baseTiles = L.tileLayer('https://{s}.tile.openstreetmap.fr/hot/{z}/{x}/{y}.png', { maxZoom: 18, attribution: '&copy; OpenStreetMap contributors, HOT', fallback: true }).addTo(map);
+  });
   const facilityLayer = L.layerGroup().addTo(map);
   const affectedAreaLayer = L.layerGroup().addTo(map);
   fetch('/api/v1/facilities').then(r => r.json()).then(facilities => facilities.forEach(f => {
@@ -143,7 +150,7 @@
         const response = await fetch(`/api/v1/places?q=${encodeURIComponent(location)}`);
         const results = await response.json();
         const point = results[0];
-        if (!point || point.lat == null || point.lon == null) continue;
+        if (!point || point.lat == null || point.lon == null || point.lat < 25 || point.lat > 31.5 || point.lon < 80 || point.lon > 89.5) continue;
         const latLng = [point.lat, point.lon];
         const navigation = `https://www.google.com/maps/dir/?api=1&destination=${point.lat},${point.lon}`;
         L.circleMarker(latLng, { radius: 9, color: '#b42318', fillColor: '#e25d4f', fillOpacity: 0.9, weight: 2 })
@@ -209,7 +216,9 @@
     }
     const affectedPoints = await renderAffectedAreas(activeEvent);
     points.push(...affectedPoints);
-    if (points.length) map.fitBounds(points, { padding: [25, 25] }); else map.setView([28.3949, 84.1240], 7);
+    if (points.length) map.fitBounds(points, { padding: [25, 25], maxZoom: 12 }); else map.setView([28.3949, 84.1240], 7);
+    // Leaflet can render an empty pane when its card finishes layout after map creation.
+    setTimeout(() => map.invalidateSize(), 0);
   }
 
   document.getElementById('map-days').addEventListener('input', e => { document.getElementById('map-days-label').textContent = e.target.value; refresh(); });

@@ -53,7 +53,7 @@
         const response = await fetch(`/api/v1/places?q=${encodeURIComponent(location)}`);
         const results = await response.json();
         const point = results[0];
-        if (!point || point.lat == null || point.lon == null) continue;
+        if (!point || point.lat == null || point.lon == null || point.lat < 25 || point.lat > 31.5 || point.lon < 80 || point.lon > 89.5) continue;
         const latLng = [point.lat, point.lon];
         const directions = `https://www.google.com/maps/dir/?api=1&destination=${point.lat},${point.lon}`;
         L.circleMarker(latLng, { radius: 8, color: '#b42318', fillColor: '#e25d4f', fillOpacity: 0.9, weight: 2 })
@@ -71,7 +71,14 @@
     const event = events.find(item => String(item.id) === form.dataset.eventId);
     const container = form.querySelector('.event-boundary-map');
     const map = L.map(container, { scrollWheelZoom: false }).setView([28.3949, 84.1240], 7);
-    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', { maxZoom: 18, attribution: '&copy; OpenStreetMap contributors' }).addTo(map);
+    let baseTiles = L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', { maxZoom: 18, attribution: '&copy; OpenStreetMap contributors' }).addTo(map);
+    let tileErrors = 0;
+    baseTiles.on('tileerror', () => {
+      tileErrors += 1;
+      if (tileErrors < 3 || baseTiles.options.fallback) return;
+      map.removeLayer(baseTiles);
+      baseTiles = L.tileLayer('https://{s}.tile.openstreetmap.fr/hot/{z}/{x}/{y}.png', { maxZoom: 18, attribution: '&copy; OpenStreetMap contributors, HOT', fallback: true }).addTo(map);
+    });
     const layer = new L.FeatureGroup().addTo(map);
     const hotspotLayer = L.layerGroup().addTo(map);
     const drawControl = new L.Control.Draw({ draw: { polyline: false, rectangle: true, polygon: true, circle: false, circlemarker: false, marker: false }, edit: { featureGroup: layer } });
@@ -85,6 +92,7 @@
       } catch (_) {}
     }
     if (event) addAffectedHotspots(map, hotspotLayer, event.affected_locations);
+    setTimeout(() => map.invalidateSize(), 0);
     map.on(L.Draw.Event.CREATED, function (e) {
       layer.clearLayers();
       layer.addLayer(e.layer);

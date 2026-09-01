@@ -47,14 +47,24 @@ const latField = document.getElementById('panic-latitude');
 const lonField = document.getElementById('panic-longitude');
 const latInput = document.getElementById('panic-latitude-input');
 const lonInput = document.getElementById('panic-longitude-input');
+const messageInput = panicForm.querySelector('textarea[name="message"]');
 let panicMarker = null;
+function updatePoliceDraft() {
+  const lat = Number(latField.value);
+  const lon = Number(lonField.value);
+  if (!Number.isFinite(lat) || !Number.isFinite(lon)) return;
+  const message = messageInput.value.trim();
+  const body = encodeURIComponent(`SOS emergency${message ? `: ${message}` : ''}. My location: https://maps.google.com/?q=${lat},${lon}. Please send help.`);
+  document.getElementById('police-sms').href = `sms:100?body=${body}`;
+}
 function setPanicLocation(lat, lon, source) {
   lat = Number(lat); lon = Number(lon);
   if (!Number.isFinite(lat) || !Number.isFinite(lon) || lat < -90 || lat > 90 || lon < -180 || lon > 180) return false;
   latField.value = lat; lonField.value = lon; latInput.value = lat.toFixed(6); lonInput.value = lon.toFixed(6);
   document.getElementById('panic-location-label').value = `${lat.toFixed(6)}, ${lon.toFixed(6)}`;
-  const body = encodeURIComponent(`SOS emergency. My location: https://maps.google.com/?q=${lat},${lon}. Please send help.`);
-  document.getElementById('police-sms').href = `sms:100?body=${body}`;
+  updatePoliceDraft();
+  // Manual map selection is as valid as GPS for the on-device SMS draft.
+  document.getElementById('panic-actions').hidden = false;
   panicButton.disabled = false;
   panicStatus.textContent = source === 'gps' ? 'GPS location ready.' : 'Location selected. Review it, then send the SOS alert.';
   if (panicMarker) panicMarker.setLatLng([lat, lon]);
@@ -64,10 +74,10 @@ const panicMap = L.map('panic-map').setView([28.3949, 84.1240], 7);
 L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {maxZoom: 18, attribution: '&copy; OpenStreetMap contributors'}).addTo(panicMap);
 panicMap.on('click', (event) => setPanicLocation(event.latlng.lat, event.latlng.lng, 'map'));
 document.getElementById('panic-use-manual').addEventListener('click', () => setPanicLocation(latInput.value, lonInput.value, 'manual'));
+messageInput.addEventListener('input', updatePoliceDraft);
 if (navigator.geolocation) {
   navigator.geolocation.getCurrentPosition((position) => {
     setPanicLocation(position.coords.latitude, position.coords.longitude, 'gps');
-    document.getElementById('panic-actions').hidden = false;
   }, () => { panicStatus.textContent = 'GPS permission was not granted. Tap your location on the map below instead.'; document.getElementById('panic-manual-location').open = true; });
 } else { panicStatus.textContent = 'GPS is unavailable. Tap your location on the map below.'; document.getElementById('panic-manual-location').open = true; }
 panicForm.addEventListener('submit', () => { panicButton.disabled = true; panicStatus.textContent = 'Sending SOS alert...'; });
