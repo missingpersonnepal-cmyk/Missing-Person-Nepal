@@ -108,7 +108,8 @@
   L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', { maxZoom: 18, attribution: '&copy; OpenStreetMap contributors' }).addTo(map);
   const facilityLayer = L.layerGroup().addTo(map);
   fetch('/api/v1/facilities').then(r => r.json()).then(facilities => facilities.forEach(f => {
-    L.circleMarker([f.lat, f.lon], {radius:8, color:'#b92d27', fillColor:'#f0a24b', fillOpacity:.9}).bindPopup(`<strong>${f.name}</strong><br>${f.type}<br>${f.address || ''}<br>${f.contact || ''}`).addTo(facilityLayer);
+    const navigation = f.navigation_url || `https://www.google.com/maps/dir/?api=1&destination=${f.lat},${f.lon}`;
+    L.circleMarker([f.lat, f.lon], {radius:8, color:'#b92d27', fillColor:'#f0a24b', fillOpacity:.9}).bindPopup(`<strong>${f.name}</strong><br>${f.type}<br>${f.address || ''}<br>${f.contact || ''}<br><a href="${navigation}" target="_blank" rel="noopener noreferrer">Get directions</a>`).addTo(facilityLayer);
   })).catch(() => {});
   const clusterLayer = L.markerClusterGroup();
   const heatLayer = L.heatLayer([], { radius: 24, blur: 18, maxZoom: 12 });

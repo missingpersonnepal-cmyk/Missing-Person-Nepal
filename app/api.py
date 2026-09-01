@@ -91,7 +91,7 @@ def place_reverse(lat: float, lon: float):
 def facilities():
     with SessionLocal() as db:
         rows = db.scalars(select(Facility).where(Facility.active.is_(True)).order_by(Facility.name)).all()
-        return [{"id": f.id, "name": f.name, "type": f.facility_type, "address": f.address, "contact": f.contact, "capacity": f.capacity, "lat": f.lat, "lon": f.lon} for f in rows]
+        return [{"id": f.id, "name": f.name, "type": f.facility_type, "address": f.address, "contact": f.contact, "capacity": f.capacity, "lat": f.lat, "lon": f.lon, "navigation_url": f"https://www.google.com/maps/dir/?api=1&destination={f.lat},{f.lon}"} for f in rows]
 
 
 @router.get("/people")
