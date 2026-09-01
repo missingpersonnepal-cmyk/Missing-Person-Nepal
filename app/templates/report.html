@@ -20,25 +20,50 @@
   <label>Existing public social-media/source link</label><input name="social_url" type="url" placeholder="https://facebook.com/..."><hr>
   <div class="inline"><div><label>Your name (private)</label><input name="reporter_name"></div><div><label>Your phone (private)</label><input name="reporter_phone"></div><div><label>Relationship</label><input name="reporter_relationship"></div></div>
   <label>Additional notes</label><textarea name="notes"></textarea>
+  <p id="report-sync-status" class="muted" role="status"></p>
   <button type="submit">Submit report</button>
 </form>
 <script>
 const reportForm = document.getElementById('report-form');
 const REPORT_QUEUE = 'missing-person-report-queue';
 function queuedReports() { try { return JSON.parse(localStorage.getItem(REPORT_QUEUE) || '[]'); } catch (_) { return []; } }
+const REPORT_DRAFT = 'missing-person-report-draft';
+const syncStatus = document.getElementById('report-sync-status');
+function setSyncStatus(message) { if (syncStatus) syncStatus.textContent = message; }
+function saveDraft() {
+  const data = Object.fromEntries(new FormData(reportForm));
+  delete data.photo;
+  try { localStorage.setItem(REPORT_DRAFT, JSON.stringify(data)); } catch (_) {}
+}
+function restoreDraft() {
+  try {
+    const data = JSON.parse(localStorage.getItem(REPORT_DRAFT) || 'null');
+    if (!data) return;
+    for (const [key, value] of Object.entries(data)) {
+      const field = reportForm.elements[key];
+      if (field && !field.value) field.value = value;
+    }
+    setSyncStatus('Saved draft restored from this device.');
+  } catch (_) {}
+}
 async function flushReports() {
   const queue = queuedReports();
-  for (const data of queue) { try { const response = await fetch('/report', {method:'POST', body:new URLSearchParams(data)}); if (!response.ok) return; } catch (_) { return; } }
-  localStorage.removeItem(REPORT_QUEUE);
+  if (!queue.length) return;
+  const remaining = [];
+  for (const data of queue) { try { const response = await fetch('/report', {method:'POST', body:new URLSearchParams(data)}); if (!response.ok) { remaining.push(data); break; } } catch (_) { remaining.push(data); break; } }
+  if (remaining.length) { localStorage.setItem(REPORT_QUEUE, JSON.stringify(remaining)); setSyncStatus(`${remaining.length} report(s) waiting for connection.`); }
+  else { localStorage.removeItem(REPORT_QUEUE); setSyncStatus('Queued report(s) submitted successfully.'); }
 }
 window.addEventListener('online', flushReports);
+window.addEventListener('load', () => { restoreDraft(); flushReports(); });
+reportForm.addEventListener('input', saveDraft);
 reportForm.addEventListener('submit', (event) => {
-  if (navigator.onLine) return;
+  if (navigator.onLine) { localStorage.removeItem(REPORT_DRAFT); return; }
   event.preventDefault();
   const data = Object.fromEntries(new FormData(reportForm));
   delete data.photo;
   const queue = queuedReports(); queue.push(data); localStorage.setItem(REPORT_QUEUE, JSON.stringify(queue));
-  alert('No connection. Your report details were saved on this device and will retry when you are online. Photos must be added after reconnecting.');
+  setSyncStatus('No connection. Report saved on this device and will retry automatically. Photos must be added after reconnecting.');
 });
 </script>
 {% endblock %}
