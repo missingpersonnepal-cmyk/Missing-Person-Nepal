@@ -4,6 +4,7 @@ from app.services.search_providers import serper_status
 from pathlib import Path
 from concurrent.futures import ThreadPoolExecutor
 import json
+import re
 from urllib.parse import urlencode
 
 from fastapi import APIRouter, Request
@@ -268,7 +269,29 @@ def _geo_point_for_text(text: str) -> GeoPoint | None:
     point = parse_coords(text)
     if point:
         return point
-    return geocode(text)
+    raw = " ".join((text or "").replace("–", "-").replace("—", "-").split()).strip()
+    if not raw:
+        return None
+    queries = [raw]
+    normalized = raw.casefold().replace("timmure", "timure").replace("rusuwa", "rasuwa")
+    if normalized != raw.casefold():
+        queries.append(normalized)
+    for part in re.split(r"[,/|;:-]", normalized):
+        candidate = part.strip(" .")
+        if len(candidate) >= 4 and candidate.casefold() not in {"near", "area", "last", "project"}:
+            queries.append(candidate)
+    seen: set[str] = set()
+    for query in queries[:5]:
+        if query.casefold() in seen:
+            continue
+        seen.add(query.casefold())
+        try:
+            point = geocode(query)
+        except Exception:
+            point = None
+        if point:
+            return point
+    return None
 
 
 async def _candidate_prefill_payload(
