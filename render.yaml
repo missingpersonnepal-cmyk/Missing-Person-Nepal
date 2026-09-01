@@ -43,5 +43,9 @@ services:
         sync: false
       - key: GEO_API_KEY
         sync: false
+      - key: OPENAI_API_KEY
+        sync: false
+      - key: SERPER_API_KEY
+        sync: false
       - key: PUBLIC_BASE_URL
         sync: false
