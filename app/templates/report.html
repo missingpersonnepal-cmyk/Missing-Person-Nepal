@@ -25,11 +25,41 @@
 </form>
 <script>
 const reportForm = document.getElementById('report-form');
-const REPORT_QUEUE = 'missing-person-report-queue';
-function queuedReports() { try { return JSON.parse(localStorage.getItem(REPORT_QUEUE) || '[]'); } catch (_) { return []; } }
 const REPORT_DRAFT = 'missing-person-report-draft';
 const syncStatus = document.getElementById('report-sync-status');
+const REPORT_DB = 'missing-person-offline-reports';
+const REPORT_STORE = 'queue';
 function setSyncStatus(message) { if (syncStatus) syncStatus.textContent = message; }
+function openReportDb() {
+  return new Promise((resolve, reject) => {
+    const request = indexedDB.open(REPORT_DB, 1);
+    request.onupgradeneeded = () => request.result.createObjectStore(REPORT_STORE, { keyPath: 'id' });
+    request.onsuccess = () => resolve(request.result);
+    request.onerror = () => reject(request.error);
+  });
+}
+async function queuedReports() {
+  const db = await openReportDb();
+  return new Promise((resolve, reject) => {
+    const request = db.transaction(REPORT_STORE, 'readonly').objectStore(REPORT_STORE).getAll();
+    request.onsuccess = () => resolve(request.result || []);
+    request.onerror = () => reject(request.error);
+  });
+}
+async function saveQueuedReport(record) {
+  const db = await openReportDb();
+  return new Promise((resolve, reject) => {
+    const request = db.transaction(REPORT_STORE, 'readwrite').objectStore(REPORT_STORE).put(record);
+    request.onsuccess = () => resolve(); request.onerror = () => reject(request.error);
+  });
+}
+async function removeQueuedReport(id) {
+  const db = await openReportDb();
+  return new Promise((resolve, reject) => {
+    const request = db.transaction(REPORT_STORE, 'readwrite').objectStore(REPORT_STORE).delete(id);
+    request.onsuccess = () => resolve(); request.onerror = () => reject(request.error);
+  });
+}
 function saveDraft() {
   const data = Object.fromEntries(new FormData(reportForm));
   delete data.photo;
@@ -47,12 +77,22 @@ function restoreDraft() {
   } catch (_) {}
 }
 async function flushReports() {
-  const queue = queuedReports();
+  let queue;
+  try { queue = await queuedReports(); } catch (_) { return; }
   if (!queue.length) return;
-  const remaining = [];
-  for (const data of queue) { try { const response = await fetch('/report', {method:'POST', body:new URLSearchParams(data)}); if (!response.ok) { remaining.push(data); break; } } catch (_) { remaining.push(data); break; } }
-  if (remaining.length) { localStorage.setItem(REPORT_QUEUE, JSON.stringify(remaining)); setSyncStatus(`${remaining.length} report(s) waiting for connection.`); }
-  else { localStorage.removeItem(REPORT_QUEUE); setSyncStatus('Queued report(s) submitted successfully.'); }
+  let sent = 0;
+  for (const item of queue) {
+    try {
+      const body = new FormData();
+      Object.entries(item.data).forEach(([key, value]) => body.append(key, value));
+      if (item.photo) body.append('photo', item.photo, item.photoName || 'offline-photo.jpg');
+      const response = await fetch('/report', { method: 'POST', body });
+      if (!response.ok) break;
+      await removeQueuedReport(item.id); sent += 1;
+    } catch (_) { break; }
+  }
+  const remaining = (await queuedReports()).length;
+  setSyncStatus(remaining ? `${remaining} report(s) waiting for connection.` : `Queued report${sent === 1 ? '' : 's'} submitted successfully.`);
 }
 window.addEventListener('online', flushReports);
 window.addEventListener('load', () => { restoreDraft(); flushReports(); });
@@ -60,10 +100,16 @@ reportForm.addEventListener('input', saveDraft);
 reportForm.addEventListener('submit', (event) => {
   if (navigator.onLine) { localStorage.removeItem(REPORT_DRAFT); return; }
   event.preventDefault();
-  const data = Object.fromEntries(new FormData(reportForm));
-  delete data.photo;
-  const queue = queuedReports(); queue.push(data); localStorage.setItem(REPORT_QUEUE, JSON.stringify(queue));
-  setSyncStatus('No connection. Report saved on this device and will retry automatically. Photos must be added after reconnecting.');
+  const formData = new FormData(reportForm);
+  const data = Object.fromEntries([...formData.entries()].filter(([key, value]) => key !== 'photo' && typeof value === 'string'));
+  const photo = formData.get('photo');
+  saveQueuedReport({
+    id: crypto.randomUUID(), data, photo: photo instanceof File && photo.size ? photo : null,
+    photoName: photo instanceof File ? photo.name : '', createdAt: new Date().toISOString()
+  }).then(() => {
+    setSyncStatus('No connection. Report and selected photo are stored securely on this device and will retry automatically.');
+    localStorage.removeItem(REPORT_DRAFT); reportForm.reset();
+  }).catch(() => setSyncStatus('This browser could not store the offline report. Keep this page open and try again when connected.'));
 });
 </script>
 {% endblock %}
