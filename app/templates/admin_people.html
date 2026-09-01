@@ -32,7 +32,7 @@
       {% else %}<span class="badge">MISSING</span>{% endif %}
     </td>
     <td>{{ p.last_seen_location }}</td>
-    <td>{% if p.age is not none and (p.age < 13 or p.age >= 65) %}<span class="badge">URGENT</span>{% elif not p.source_confirmed %}<span class="badge">REVIEW</span>{% else %}Standard{% endif %}</td>
+    <td><span class="badge">{{ priority_map[p.id][1] }}</span> {{ priority_map[p.id][0] }}/100</td>
     <td>{{ p.assigned_admin_id or 'Unassigned' }}</td>
     <td>{{ 'Yes' if p.published else 'No' }}{% if p.archived %} / Archived{% endif %}</td>
     <td>

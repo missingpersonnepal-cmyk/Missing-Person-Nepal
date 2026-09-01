@@ -64,6 +64,7 @@ from ..services.priority_sources import (
     user_search_tags,
     user_source_seeds,
 )
+from ..services.case_priority import case_priority
 from ..services.share_cards import build_share_card
 from ..services.jobs import get as get_job, submit as submit_job
 from .common import admin_gate, audit, current_admin, next_case_number, parse_date, parse_int, parse_time, render, role_gate
@@ -844,6 +845,8 @@ def admin_people(
             )
         people = list(db.scalars(stmt.limit(500)).all())
         status_map = _person_case_status_map(db, [person.id for person in people])
+        priority_map = {person.id: case_priority(person) for person in people}
+        people.sort(key=lambda person: priority_map[person.id][0], reverse=True)
 
         counts: dict[str, int] = {}
         for status_name in ("missing", "found", "identified"):
@@ -872,6 +875,7 @@ def admin_people(
             status_map=status_map,
             status_counts=counts,
             staff=staff,
+            priority_map=priority_map,
         )
 
 
