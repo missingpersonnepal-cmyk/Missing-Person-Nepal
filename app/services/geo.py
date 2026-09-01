@@ -33,6 +33,12 @@ def _headers() -> dict[str, str]:
     return {"X-Api-Key": settings.geo_api_key.strip()}
 
 
+def _response_data(payload):
+    if not isinstance(payload, dict):
+        return payload
+    return payload.get("data", payload)
+
+
 def geocode_results(query: str, limit: int = 5) -> list[GeoPoint]:
     if not settings.geo_api_key.strip() or not query.strip():
         return []
@@ -40,7 +46,7 @@ def geocode_results(query: str, limit: int = 5) -> list[GeoPoint]:
     with httpx.Client(timeout=15.0) as client:
         response = client.get(url, params={"query": query, "limit": max(1, min(limit, 10)), "language": "en"}, headers=_headers())
         response.raise_for_status()
-        data = response.json()
+    data = _response_data(response.json())
     items = data if isinstance(data, list) else data.get("results") if isinstance(data, dict) else None
     results: list[GeoPoint] = []
     for item in items or []:
@@ -51,7 +57,12 @@ def geocode_results(query: str, limit: int = 5) -> list[GeoPoint]:
         results.append(GeoPoint(
             lat=float(lat),
             lon=float(lon),
-            label=item.get("display_name") or item.get("name") or item.get("label"),
+            label=(
+                item.get("display_name")
+                or item.get("displayName")
+                or item.get("name")
+                or item.get("label")
+            ),
         ))
     return results
 
@@ -68,9 +79,14 @@ def reverse_geocode(lat: float, lon: float) -> str | None:
     with httpx.Client(timeout=15.0) as client:
         response = client.get(url, params={"lat": lat, "lon": lon, "detail": "road", "language": "en"}, headers=_headers())
         response.raise_for_status()
-        data = response.json()
+        data = _response_data(response.json())
     if isinstance(data, dict):
-        return data.get("display_name") or data.get("name") or data.get("label")
+        return (
+            data.get("display_name")
+            or data.get("displayName")
+            or data.get("name")
+            or data.get("label")
+        )
     return None
 
 
@@ -85,4 +101,5 @@ def route(origin: str, destination: str, mode: str = "driving") -> dict:
             headers=_headers(),
         )
         response.raise_for_status()
-        return response.json()
+        data = _response_data(response.json())
+        return data if isinstance(data, dict) else {"data": data}
