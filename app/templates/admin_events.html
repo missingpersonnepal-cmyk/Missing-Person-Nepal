@@ -25,6 +25,7 @@
     <label>Name</label><input name="name" value="{{ d.name }}">
     <label>Type</label><input name="disaster_type" value="{{ d.disaster_type }}">
     <label>Affected locations</label><textarea name="affected_locations">{{ d.affected_locations }}</textarea>
+    <p class="muted">Each line is shown as a map hotspot using the configured place provider. Review suggested locations and keep one unambiguous place per line.</p>
     <input type="hidden" name="boundary_geojson" value="{{ d.boundary_geojson or '' }}">
     <div class="event-boundary-map" style="height:240px;border-radius:12px;overflow:hidden;background:#e7ece7;margin:10px 0"></div>
     <label><input type="checkbox" name="active" style="width:auto" {% if d.active %}checked{% endif %}> Active</label>
@@ -40,12 +41,39 @@
 <script>
 (async function () {
   const events = await fetch('/api/v1/events').then(r => r.json());
-  document.querySelectorAll('.event-editor').forEach((form, index) => {
-    const event = events[index];
+  function escapeHtml(value) {
+    return String(value || '').replace(/[&<>'"]/g, char => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', "'": '&#39;', '"': '&quot;' }[char]));
+  }
+
+  async function addAffectedHotspots(map, hotspotLayer, locations) {
+    const bounds = [];
+    const uniqueLocations = [...new Set((locations || []).map(value => String(value).trim()).filter(Boolean))];
+    for (const location of uniqueLocations) {
+      try {
+        const response = await fetch(`/api/v1/places?q=${encodeURIComponent(location)}`);
+        const results = await response.json();
+        const point = results[0];
+        if (!point || point.lat == null || point.lon == null) continue;
+        const latLng = [point.lat, point.lon];
+        const directions = `https://www.google.com/maps/dir/?api=1&destination=${point.lat},${point.lon}`;
+        L.circleMarker(latLng, { radius: 8, color: '#b42318', fillColor: '#e25d4f', fillOpacity: 0.9, weight: 2 })
+          .bindPopup(`<strong>Affected area</strong><br>${escapeHtml(point.label || location)}<br><a href="${directions}" target="_blank" rel="noopener noreferrer">Get directions</a>`)
+          .addTo(hotspotLayer);
+        bounds.push(latLng);
+      } catch (_) {
+        // A failed provider lookup must not prevent an administrator editing the event.
+      }
+    }
+    if (bounds.length) map.fitBounds(bounds, { padding: [20, 20], maxZoom: 12 });
+  }
+
+  document.querySelectorAll('.event-editor').forEach((form) => {
+    const event = events.find(item => String(item.id) === form.dataset.eventId);
     const container = form.querySelector('.event-boundary-map');
     const map = L.map(container, { scrollWheelZoom: false }).setView([28.3949, 84.1240], 7);
     L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', { maxZoom: 18, attribution: '&copy; OpenStreetMap contributors' }).addTo(map);
     const layer = new L.FeatureGroup().addTo(map);
+    const hotspotLayer = L.layerGroup().addTo(map);
     const drawControl = new L.Control.Draw({ draw: { polyline: false, rectangle: true, polygon: true, circle: false, circlemarker: false, marker: false }, edit: { featureGroup: layer } });
     map.addControl(drawControl);
     const hidden = form.querySelector('input[name="boundary_geojson"]');
@@ -56,6 +84,7 @@
         map.fitBounds(geo.getBounds(), { padding: [20, 20] });
       } catch (_) {}
     }
+    if (event) addAffectedHotspots(map, hotspotLayer, event.affected_locations);
     map.on(L.Draw.Event.CREATED, function (e) {
       layer.clearLayers();
       layer.addLayer(e.layer);

@@ -10,6 +10,15 @@ from ..config import settings
 
 COORD_RE = re.compile(r"^\s*(-?\d+(?:\.\d+)?)\s*,\s*(-?\d+(?:\.\d+)?)\s*$")
 
+# Reports often use local spellings. Keep the displayed report text unchanged,
+# but retry known variants so those areas can still be placed accurately on maps.
+PLACE_QUERY_ALIASES = {
+    "syafrubesi": "Syabrubesi, Rasuwa, Nepal",
+    "syabrubesi": "Syabrubesi, Rasuwa, Nepal",
+    "rasuwagadhi": "Rasuwagadhi, Rasuwa, Nepal",
+    "ruwakot and majhimtar": "Ruwakot, Majhimtar, Nuwakot, Nepal",
+}
+
 
 @dataclass(frozen=True)
 class GeoPoint:
@@ -39,7 +48,7 @@ def _response_data(payload):
     return payload.get("data", payload)
 
 
-def geocode_results(query: str, limit: int = 5) -> list[GeoPoint]:
+def _geocode_request(query: str, limit: int) -> list[GeoPoint]:
     if not settings.geo_api_key.strip() or not query.strip():
         return []
     url = f"{settings.geo_api_base_url}/api/geo/geocode"
@@ -65,6 +74,14 @@ def geocode_results(query: str, limit: int = 5) -> list[GeoPoint]:
             ),
         ))
     return results
+
+
+def geocode_results(query: str, limit: int = 5) -> list[GeoPoint]:
+    results = _geocode_request(query, limit)
+    if results:
+        return results
+    alias = PLACE_QUERY_ALIASES.get(query.strip().casefold())
+    return _geocode_request(alias, limit) if alias else []
 
 
 def geocode(query: str) -> GeoPoint | None:
