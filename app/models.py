@@ -298,6 +298,22 @@ class NotificationOutbox(Base):
     )
 
 
+class BackgroundJob(Base):
+    """Persisted operational work record; payloads and results are JSON text."""
+    __tablename__ = "mp_background_jobs"
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True)
+    kind: Mapped[str] = mapped_column(String(80), index=True)
+    status: Mapped[str] = mapped_column(String(20), default="queued", index=True)
+    payload: Mapped[str] = mapped_column(Text, default="{}")
+    result: Mapped[str] = mapped_column(Text, default="{}")
+    error: Mapped[str | None] = mapped_column(Text, nullable=True)
+    attempts: Mapped[int] = mapped_column(Integer, default=0)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, index=True)
+    started_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    completed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+
+
 class AdminUser(Base):
     __tablename__ = "mp_admins"
 
