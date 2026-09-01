@@ -9,6 +9,9 @@ branch_labels: Union[str, Sequence[str], None] = None
 depends_on: Union[str, Sequence[str], None] = None
 
 def upgrade() -> None:
+    # Supabase may briefly hold a lock while active web requests finish.
+    # Allow this small, one-time schema migration enough time to complete.
+    op.execute("SET LOCAL statement_timeout = '300s'")
     op.add_column("mp_missing_people", sa.Column("assigned_admin_id", sa.Integer(), nullable=True))
     op.add_column("mp_missing_people", sa.Column("assigned_at", sa.DateTime(timezone=True), nullable=True))
     op.create_foreign_key("fk_mp_people_assigned_admin", "mp_missing_people", "mp_admins", ["assigned_admin_id"], ["id"])
