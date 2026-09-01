@@ -47,7 +47,11 @@ Every export generates an audit-log entry. The export may include admin-only res
 
 ## Backup
 
-For the review-stage V0, rely on the existing Supabase backup policy plus a periodic admin export for operational portability. Before public production, define tested database restore and media/object-storage backup procedures.
+For the review-stage V0, rely on the existing Supabase backup policy plus a periodic restricted admin export for operational portability. Before public production, define and test a database restore and media/object-storage backup procedure. Keep one encrypted export in an authorized storage location, verify a restore in an isolated environment quarterly, and record the result in the operational handover log.
+
+## Retention and privacy
+
+Keep public case data only while it is operationally necessary. Review unresolved cases at least every 90 days. Reporter phone numbers, residential addresses, SOS messages, and rejected submissions are private operational data: restrict access to authorized staff, review them at least every 90 days, and delete or anonymize them only after the organization has approved a documented retention schedule. Never use an admin export as a public handout.
 
 ## Current filesystem storage caveat
 

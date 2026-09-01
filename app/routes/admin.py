@@ -65,6 +65,7 @@ from ..services.priority_sources import (
     user_source_seeds,
 )
 from ..services.case_priority import case_priority
+from ..services.rate_limit import admin_login_limiter
 from ..services.share_cards import build_share_card
 from ..services.jobs import get as get_job, submit as submit_job
 from .common import admin_gate, audit, current_admin, next_case_number, parse_date, parse_int, parse_time, render, role_gate
@@ -425,10 +426,16 @@ async def login(request: Request):
     form = await request.form()
     username = str(form.get("username") or "")
     password = str(form.get("password") or "")
+    client_ip = request.client.host if request.client else "unknown"
+    limiter_key = f"{client_ip}:{username.casefold()}"
+    if not admin_login_limiter.allowed(limiter_key):
+        return render(request, "admin_login.html", error="Too many login attempts. Try again in 15 minutes.")
     with SessionLocal() as db:
         admin = db.scalar(select(AdminUser).where(AdminUser.username == username, AdminUser.active.is_(True)))
         if admin is None or not verify_password(password, admin.password_hash):
+            admin_login_limiter.record_failure(limiter_key)
             return render(request, "admin_login.html", error="Invalid credentials")
+        admin_login_limiter.clear(limiter_key)
         admin.last_login_at = utcnow()
         request.session["admin"] = admin.username
         audit(db, request, "login", "admin", admin.id)
