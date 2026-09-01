@@ -2,6 +2,14 @@
 {% block content %}
 <h1>{{ person.case_number }} — {{ person.name }}</h1>
 <div class="card">
+  <h2>Staff assignment</h2>
+  <p class="muted">Assign one active staff member to own the next review or follow-up.</p>
+  <form method="post" action="/admin/people/{{ person.id }}/assign" class="inline">
+    <select name="assigned_admin_id"><option value="">Unassigned</option>{% for member in staff %}<option value="{{ member.id }}" {% if person.assigned_admin_id == member.id %}selected{% endif %}>{{ member.display_name or member.username }} ({{ member.role }})</option>{% endfor %}</select>
+    <button>Save assignment</button>
+  </form>
+</div>
+<div class="card">
   <strong>Case status:</strong>
   {% if case_status == "found" %}<span class="badge">FOUND ALIVE</span>
   {% elif case_status == "identified" %}<span class="badge">IDENTIFIED / DECEASED</span>

@@ -19,7 +19,7 @@
 </form>
 
 <table>
-  <thead><tr><th>Case</th><th>Name</th><th>Status</th><th>Last seen</th><th>Sources</th><th>Published</th><th>Actions</th></tr></thead>
+  <thead><tr><th>Case</th><th>Name</th><th>Status</th><th>Last seen</th><th>Priority</th><th>Assigned</th><th>Published</th><th>Actions</th></tr></thead>
   <tbody>
   {% for p in people %}
   {% set status = status_map.get(p.id, 'missing') %}
@@ -32,7 +32,8 @@
       {% else %}<span class="badge">MISSING</span>{% endif %}
     </td>
     <td>{{ p.last_seen_location }}</td>
-    <td>{{ p.sources|length }}</td>
+    <td>{% if p.age is not none and (p.age < 13 or p.age >= 65) %}<span class="badge">URGENT</span>{% elif not p.source_confirmed %}<span class="badge">REVIEW</span>{% else %}Standard{% endif %}</td>
+    <td>{{ p.assigned_admin_id or 'Unassigned' }}</td>
     <td>{{ 'Yes' if p.published else 'No' }}{% if p.archived %} / Archived{% endif %}</td>
     <td>
       <a class="button secondary" href="/admin/people/{{ p.id }}">Edit</a>
@@ -48,7 +49,7 @@
     </td>
   </tr>
   {% else %}
-  <tr><td colspan="7">No records in this status filter.</td></tr>
+  <tr><td colspan="8">No records in this status filter.</td></tr>
   {% endfor %}
   </tbody>
 </table>

@@ -81,6 +81,8 @@ class MissingPerson(Base):
     verified_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     approval_notes: Mapped[str | None] = mapped_column(Text, nullable=True)
     location_uncertain: Mapped[bool] = mapped_column(Boolean, default=False)
+    assigned_admin_id: Mapped[int | None] = mapped_column(ForeignKey("mp_admins.id"), nullable=True, index=True)
+    assigned_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, onupdate=utcnow)
 

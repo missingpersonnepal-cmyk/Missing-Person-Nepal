@@ -819,6 +819,7 @@ def admin_people(
 
     with SessionLocal() as db:
         disasters = list(db.scalars(select(Disaster).order_by(Disaster.start_date.desc())).all())
+        staff = list(db.scalars(select(AdminUser).where(AdminUser.active.is_(True)).order_by(AdminUser.display_name, AdminUser.username)).all())
         stmt = (
             select(MissingPerson)
             .options(selectinload(MissingPerson.sources))
@@ -870,6 +871,7 @@ def admin_people(
             case_status=case_status,
             status_map=status_map,
             status_counts=counts,
+            staff=staff,
         )
 
 
@@ -920,7 +922,31 @@ def admin_person(request: Request, person_id: int):
                 .where(CaseTimeline.person_id == person.id)
                 .order_by(CaseTimeline.created_at.desc())
             ).all()),
+            staff=list(db.scalars(select(AdminUser).where(AdminUser.active.is_(True)).order_by(AdminUser.display_name, AdminUser.username)).all()),
         )
+
+
+@router.post("/admin/people/{person_id}/assign")
+async def admin_person_assign(request: Request, person_id: int):
+    gate = admin_gate(request)
+    if gate:
+        return gate
+    form = await request.form()
+    raw_admin_id = str(form.get("assigned_admin_id") or "").strip()
+    with SessionLocal() as db:
+        person = db.get(MissingPerson, person_id)
+        if person is None:
+            return HTMLResponse("Not found", status_code=404)
+        assigned = db.get(AdminUser, parse_int(raw_admin_id)) if raw_admin_id else None
+        if assigned is not None and not assigned.active:
+            return HTMLResponse("Staff account is inactive", status_code=400)
+        person.assigned_admin_id = assigned.id if assigned else None
+        person.assigned_at = utcnow() if assigned else None
+        label = assigned.display_name or assigned.username if assigned else "Unassigned"
+        _add_case_timeline(db, request, person.id, "assignment_changed", f"Assigned to {label}")
+        audit(db, request, "assign_case", "person", person.id, label)
+        db.commit()
+    return RedirectResponse(f"/admin/people/{person_id}", status_code=303)
 
 
 @router.post("/admin/people/{person_id}/edit")
