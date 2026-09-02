@@ -78,6 +78,11 @@ def role_gate(request: Request, allowed_roles: set[str]) -> HTMLResponse | Redir
     return None
 
 
+def write_gate(request: Request) -> HTMLResponse | RedirectResponse | None:
+    """Block read-only accounts from every admin mutation by default."""
+    return role_gate(request, {"super_admin", "admin", "reviewer", "data_entry"})
+
+
 def audit(
     db: Session,
     request: Request,

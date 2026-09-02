@@ -119,7 +119,7 @@ def person_detail(request: Request, case_number: str):
     with SessionLocal() as db:
         person = db.scalar(
             select(MissingPerson)
-            .options(selectinload(MissingPerson.sources))
+            .options(selectinload(MissingPerson.sources), selectinload(MissingPerson.disaster))
             .where(
                 MissingPerson.case_number == case_number,
                 MissingPerson.published.is_(True),
@@ -128,7 +128,8 @@ def person_detail(request: Request, case_number: str):
         )
         if person is None:
             return HTMLResponse("Not found", status_code=404)
-        return render(request, "person.html", person=person)
+        case_state = db.get(PersonCaseState, person.id)
+        return render(request, "person.html", person=person, case_state=case_state)
 
 
 @router.get("/report", response_class=HTMLResponse)

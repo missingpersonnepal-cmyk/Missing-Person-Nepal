@@ -68,7 +68,7 @@ from ..services.case_priority import case_priority
 from ..services.rate_limit import admin_login_limiter
 from ..services.share_cards import build_share_card
 from ..services.jobs import get as get_job, submit as submit_job
-from .common import admin_gate, audit, current_admin, next_case_number, parse_date, parse_int, parse_time, render, role_gate
+from .common import admin_gate, audit, current_admin, next_case_number, parse_date, parse_int, parse_time, render, role_gate, write_gate
 
 router = APIRouter()
 MANUAL_DECK_PATH = Path(__file__).resolve().parents[1] / "static" / "user_manual_bilingual.pptx"
@@ -386,7 +386,7 @@ def admin_geo_route(request: Request, origin: str, destination: str, mode: str =
 
 @router.post("/admin/geo/backfill")
 def admin_geo_backfill(request: Request):
-    gate = admin_gate(request)
+    gate = role_gate(request, {"super_admin", "admin"})
     if gate:
         return gate
     with SessionLocal() as db:
@@ -939,7 +939,7 @@ def admin_person(request: Request, person_id: int):
 
 @router.post("/admin/people/{person_id}/assign")
 async def admin_person_assign(request: Request, person_id: int):
-    gate = admin_gate(request)
+    gate = write_gate(request)
     if gate:
         return gate
     form = await request.form()
@@ -962,7 +962,7 @@ async def admin_person_assign(request: Request, person_id: int):
 
 @router.post("/admin/people/{person_id}/edit")
 async def admin_person_edit(request: Request, person_id: int):
-    gate = admin_gate(request)
+    gate = write_gate(request)
     if gate:
         return gate
     form = await request.form()
@@ -1014,7 +1014,7 @@ async def admin_person_edit(request: Request, person_id: int):
 
 @router.post("/admin/people/{person_id}/photos")
 async def admin_person_add_photo(request: Request, person_id: int):
-    gate = admin_gate(request)
+    gate = write_gate(request)
     if gate:
         return gate
     form = await request.form()
@@ -1060,7 +1060,7 @@ def admin_person_verify_photo(request: Request, person_id: int, photo_id: int):
 
 @router.post("/admin/people/{person_id}/photo/remove")
 def admin_person_remove_photo(request: Request, person_id: int):
-    gate = admin_gate(request)
+    gate = role_gate(request, {"super_admin", "admin", "reviewer"})
     if gate:
         return gate
     filename = None
@@ -1101,7 +1101,7 @@ def admin_person_remove_photo(request: Request, person_id: int):
 
 @router.post("/admin/people/{person_id}/notifications")
 async def admin_person_add_notification(request: Request, person_id: int):
-    gate = admin_gate(request)
+    gate = role_gate(request, {"super_admin", "admin", "reviewer"})
     if gate:
         return gate
     form = await request.form()
@@ -1131,7 +1131,7 @@ async def admin_person_add_notification(request: Request, person_id: int):
 
 @router.post("/admin/people/{person_id}/notifications/{subscription_id}/disable")
 def admin_person_disable_notification(request: Request, person_id: int, subscription_id: int):
-    gate = admin_gate(request)
+    gate = role_gate(request, {"super_admin", "admin", "reviewer"})
     if gate:
         return gate
     with SessionLocal() as db:
@@ -1145,7 +1145,7 @@ def admin_person_disable_notification(request: Request, person_id: int, subscrip
 
 @router.post("/admin/people/{person_id}/notifications/retry")
 def admin_person_retry_notifications(request: Request, person_id: int):
-    gate = admin_gate(request)
+    gate = role_gate(request, {"super_admin", "admin", "reviewer"})
     if gate:
         return gate
     with SessionLocal() as db:
@@ -1156,7 +1156,7 @@ def admin_person_retry_notifications(request: Request, person_id: int):
 
 @router.post("/admin/people/{person_id}/notifications/cancel")
 def admin_person_cancel_notifications(request: Request, person_id: int):
-    gate = admin_gate(request)
+    gate = role_gate(request, {"super_admin", "admin", "reviewer"})
     if gate:
         return gate
     with SessionLocal() as db:
@@ -1167,7 +1167,7 @@ def admin_person_cancel_notifications(request: Request, person_id: int):
 
 @router.post("/admin/people/{person_id}/status")
 async def admin_person_status(request: Request, person_id: int):
-    gate = admin_gate(request)
+    gate = role_gate(request, {"super_admin", "admin", "reviewer"})
     if gate:
         return gate
     form = await request.form()
@@ -1232,7 +1232,7 @@ def admin_archive(request: Request, person_id: int):
 
 @router.post("/admin/people/{person_id}/merge")
 async def admin_merge_person(request: Request, person_id: int):
-    gate = admin_gate(request)
+    gate = role_gate(request, {"super_admin", "admin"})
     if gate:
         return gate
     form = await request.form()

@@ -116,9 +116,12 @@
   });
   const facilityLayer = L.layerGroup().addTo(map);
   const affectedAreaLayer = L.layerGroup().addTo(map);
+  function escapeHtml(value) {
+    return String(value || '').replace(/[&<>'"]/g, char => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', "'": '&#39;', '"': '&quot;' }[char]));
+  }
   fetch('/api/v1/facilities').then(r => r.json()).then(facilities => facilities.forEach(f => {
     const navigation = f.navigation_url || `https://www.google.com/maps/dir/?api=1&destination=${f.lat},${f.lon}`;
-    L.circleMarker([f.lat, f.lon], {radius:8, color:'#b92d27', fillColor:'#f0a24b', fillOpacity:.9}).bindPopup(`<strong>${f.name}</strong><br>${f.type}<br>${f.address || ''}<br>${f.contact || ''}<br><a href="${navigation}" target="_blank" rel="noopener noreferrer">Get directions</a>`).addTo(facilityLayer);
+    L.circleMarker([f.lat, f.lon], {radius:8, color:'#b92d27', fillColor:'#f0a24b', fillOpacity:.9}).bindPopup(`<strong>${escapeHtml(f.name)}</strong><br>${escapeHtml(f.type)}<br>${escapeHtml(f.address)}<br>${escapeHtml(f.contact)}<br><a href="${navigation}" target="_blank" rel="noopener noreferrer">Get directions</a>`).addTo(facilityLayer);
   })).catch(() => {});
   const clusterLayer = L.markerClusterGroup();
   const heatLayer = L.heatLayer([], { radius: 24, blur: 18, maxZoom: 12 });
@@ -133,10 +136,6 @@
     document.getElementById('map-pin-count').textContent = String(filtered.length);
     document.getElementById('map-hotspot-count').textContent = String(new Set(filtered.map(p => `${Math.round(p.lat * 10) / 10},${Math.round(p.lon * 10) / 10}`)).size);
     document.getElementById('time-slider-caption').textContent = `${filtered.length} case(s) visible`;
-  }
-
-  function escapeHtml(value) {
-    return String(value || '').replace(/[&<>'"]/g, char => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', "'": '&#39;', '"': '&quot;' }[char]));
   }
 
   async function renderAffectedAreas(event) {
@@ -172,11 +171,14 @@
       if (person.last_seen_lat == null || person.last_seen_lon == null) return;
       const ll = [person.last_seen_lat, person.last_seen_lon];
       const statusLabel = person.case_status ? person.case_status.toUpperCase() : 'UNKNOWN';
-      const marker = (person.location_uncertain ? L.circleMarker(ll, {radius:9, color:'#b7791f', dashArray:'4 3'}): L.marker(ll)).bindPopup(`<strong>${person.name}</strong><br>${person.case_number}<br>${statusLabel}<br>${person.last_seen_location || ''}${person.location_uncertain ? '<br><strong>Location uncertain</strong>' : ''}<br><span class="muted">Resolving place label...</span><br><a href="/person/${person.case_number}">Open case</a>`);
+      const safeName = escapeHtml(person.name);
+      const safeCaseNumber = escapeHtml(person.case_number);
+      const safeLocation = escapeHtml(person.last_seen_location);
+      const marker = (person.location_uncertain ? L.circleMarker(ll, {radius:9, color:'#b7791f', dashArray:'4 3'}): L.marker(ll)).bindPopup(`<strong>${safeName}</strong><br>${safeCaseNumber}<br>${statusLabel}<br>${safeLocation}${person.location_uncertain ? '<br><strong>Location uncertain</strong>' : ''}<br><span class="muted">Resolving place label...</span><br><a href="/person/${encodeURIComponent(person.case_number)}">Open case</a>`);
       marker.person = person;
       markers.push(marker);
       fetch(`/admin/geo/reverse?lat=${person.last_seen_lat}&lon=${person.last_seen_lon}`).then(r => r.json()).then(data => {
-        marker.setPopupContent(`<strong>${person.name}</strong><br>${person.case_number}<br>${statusLabel}<br>${person.last_seen_location || ''}<br>${data.label || ''}<br><a href="/person/${person.case_number}">Open case</a>`);
+        marker.setPopupContent(`<strong>${safeName}</strong><br>${safeCaseNumber}<br>${statusLabel}<br>${safeLocation}<br>${escapeHtml(data.label)}<br><a href="/person/${encodeURIComponent(person.case_number)}">Open case</a>`);
       }).catch(() => {});
       clusterLayer.addLayer(marker);
       heatLayer.addLatLng(ll);
@@ -245,7 +247,7 @@
     const radius = parseFloat(document.getElementById('nearby-radius').value || '5');
     const results = await fetch(`/api/v1/nearby?lat=${first.person.last_seen_lat}&lon=${first.person.last_seen_lon}&radius_km=${radius}`).then(r => r.json());
     document.getElementById('map-nearby-count').textContent = String(results.length);
-    document.getElementById('map-nearby-list').innerHTML = results.slice(0, 8).map(item => `<div><strong>${item.name}</strong> ${item.distance_km} km <a href="/person/${item.case_number}">${item.case_number}</a></div>`).join('');
+    document.getElementById('map-nearby-list').innerHTML = results.slice(0, 8).map(item => `<div><strong>${escapeHtml(item.name)}</strong> ${Number(item.distance_km).toFixed(1)} km <a href="/person/${encodeURIComponent(item.case_number)}">${escapeHtml(item.case_number)}</a></div>`).join('');
     if (nearbyMarker) nearbyMarker.remove();
     nearbyMarker = L.circleMarker([first.person.last_seen_lat, first.person.last_seen_lon], { radius: 10, color: '#7c3aed' }).addTo(map);
   });

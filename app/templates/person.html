@@ -1,12 +1,20 @@
 {% extends "base.html" %}
 {% block content %}
-<h1>{{ person.name }}</h1>
-{% if person.name_ne %}<h2>{{ person.name_ne }}</h2>{% endif %}
+<div class="page-heading">
+  <div>
+    <div class="eyebrow">Public missing-person record</div>
+    <h1>{{ person.name }}</h1>
+    {% if person.name_ne %}<p class="muted">{{ person.name_ne }}</p>{% endif %}
+  </div>
+  <span class="badge status-badge">{{ (case_state.status if case_state else 'missing')|title }}</span>
+</div>
 <div class="card">
   <img src="{% if person.photo_path %}/media/person/{{ person.case_number }}{% else %}/static/default-person.svg{% endif %}" alt="{% if person.photo_path %}Submitted photo for {{ person.name }}{% else %}Default placeholder image{% endif %}" style="max-width:360px;width:100%">
   <p><strong>Case:</strong> {{ person.case_number }}</p>
+  {% if person.disaster %}<p><strong>Event:</strong> {{ person.disaster.name }}</p>{% endif %}
+  <p><strong>Record status:</strong> {{ (case_state.status if case_state else 'missing')|title }}{% if person.source_confirmed %} <span class="badge">Source confirmed</span>{% else %} <span class="badge">Information under review</span>{% endif %}</p>
   <p><strong>Age:</strong> {{ person.age or 'Unknown' }} &nbsp; <strong>Gender:</strong> {{ person.gender or 'Not provided' }}</p>
-  <p><strong>Last seen:</strong> {{ person.last_seen_location }}</p>
+  <p><strong>Last seen:</strong> {{ person.last_seen_location }}{% if person.location_uncertain %} <span class="badge">Location approximate</span>{% endif %}</p>
   {% if person.last_seen_lat and person.last_seen_lon %}
   <p><a class="button secondary" href="https://www.google.com/maps?q={{ person.last_seen_lat }},{{ person.last_seen_lon }}" target="_blank" rel="noopener noreferrer">Open last-seen map</a></p>
   {% endif %}
@@ -14,6 +22,7 @@
   {% if person.clothing %}<p><strong>Clothing:</strong> {{ person.clothing }}</p>{% endif %}
   {% if person.identification_details %}<p><strong>Identification details:</strong> {{ person.identification_details }}</p>{% endif %}
   {% if person.public_contact_number %}<p><strong>Information contact:</strong> {{ person.public_contact_number }}</p>{% endif %}
+  <p class="muted">Last updated {{ person.updated_at.strftime('%Y-%m-%d %H:%M UTC') if person.updated_at else 'Unknown' }}. If any detail is incorrect, submit a correction below.</p>
   {% if admin_username %}
   <div class="inline" style="gap:8px; flex-wrap:wrap; margin-top:12px">
     <a class="button secondary" href="/admin/people/{{ person.id }}">Edit</a>

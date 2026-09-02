@@ -1,5 +1,7 @@
 from app.database import SessionLocal
-from app.models import AdminUser, AuditLog
+from datetime import date
+
+from app.models import AdminUser, AuditLog, Disaster, MissingPerson
 from app.security import verify_password
 
 
@@ -154,3 +156,26 @@ def test_role_value_is_enforced_server_side(admin_client):
         },
     )
     assert "Invalid role" in response.text
+
+
+def test_read_only_user_cannot_edit_case_records(client):
+    create_user(username="viewer", role="read_only", password="StrongPass123")
+    with SessionLocal() as db:
+        disaster = Disaster(code="RO", name="Read only test", disaster_type="flood", start_date=date(2026, 8, 26))
+        db.add(disaster)
+        db.flush()
+        person = MissingPerson(case_number="NP-2026-RO-00001", disaster_id=disaster.id, name="Protected Person")
+        db.add(person)
+        db.commit()
+        person_id = person.id
+
+    assert login(client, "viewer", "StrongPass123").status_code == 303
+    response = client.post(
+        f"/admin/people/{person_id}/edit",
+        data={"name": "Changed name", "last_seen_location": "Rasuwa"},
+        follow_redirects=False,
+    )
+
+    assert response.status_code == 403
+    with SessionLocal() as db:
+        assert db.get(MissingPerson, person_id).name == "Protected Person"
