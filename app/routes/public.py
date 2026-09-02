@@ -13,6 +13,7 @@ from ..models import Disaster, MissingPerson, PersonCaseState, Submission
 from ..services.geo import parse_coords, geocode
 from ..services.files import save_image
 from ..services.normalization import canonicalize_url
+from ..services.rate_limit import public_submission_limiter
 from .common import parse_date, parse_int, parse_time, render
 
 router = APIRouter()
@@ -23,6 +24,27 @@ def _geo_point_for_text(text: str):
     return point or geocode(text)
 
 
+def _client_limiter_key(request: Request, scope: str) -> str:
+    forwarded = request.headers.get("x-forwarded-for", "").split(",", 1)[0].strip()
+    client_ip = forwarded or (request.client.host if request.client else "unknown")
+    return f"{scope}:{client_ip}"
+
+
+def _public_submission_allowed(request: Request, scope: str) -> bool:
+    if settings.app_env.strip().casefold() != "production":
+        return True
+    key = _client_limiter_key(request, scope)
+    if not public_submission_limiter.allowed(key):
+        return False
+    public_submission_limiter.record_failure(key)
+    return True
+
+
+def _reported_gender(value: object) -> str | None:
+    """Keep only an explicitly selected, supported gender value."""
+    return {"male": "Male", "female": "Female"}.get(str(value or "").strip().casefold())
+
+
 @router.get("/panic", response_class=HTMLResponse)
 def panic_form(request: Request):
     return render(request, "panic.html", success=None, error=None)
@@ -30,6 +52,8 @@ def panic_form(request: Request):
 
 @router.post("/panic", response_class=HTMLResponse)
 async def panic_submit(request: Request):
+    if not _public_submission_allowed(request, "panic"):
+        return render(request, "panic.html", success=None, error="Too many alerts were submitted from this connection. Call emergency services directly if you are in danger.")
     form = await request.form()
     lat = str(form.get("latitude") or "").strip()
     lon = str(form.get("longitude") or "").strip()
@@ -143,6 +167,10 @@ def report_form(request: Request):
 
 @router.post("/report", response_class=HTMLResponse)
 async def submit_report(request: Request):
+    if not _public_submission_allowed(request, "report"):
+        with SessionLocal() as db:
+            disasters = list(db.scalars(select(Disaster).where(Disaster.active.is_(True)).order_by(Disaster.start_date.desc())).all())
+        return render(request, "report.html", disasters=disasters, error="Too many reports were submitted from this connection. Please wait a few minutes before trying again.", success=None)
     form = await request.form()
     with SessionLocal() as db:
         disasters = list(
@@ -158,8 +186,8 @@ async def submit_report(request: Request):
                 error="Please select an active disaster.",
                 success=None,
             )
-        name = str(form.get("name") or "").strip()
-        last_seen_location = str(form.get("last_seen_location") or "").strip()
+        name = str(form.get("name") or "").strip()[:255]
+        last_seen_location = str(form.get("last_seen_location") or "").strip()[:1000]
         if not name or not last_seen_location:
             return render(
                 request,
@@ -168,6 +196,9 @@ async def submit_report(request: Request):
                 error="Name and last-seen location are required.",
                 success=None,
             )
+        age = parse_int(form.get("age"))
+        if age is not None and not 0 <= age <= 120:
+            return render(request, "report.html", disasters=disasters, error="Age must be between 0 and 120.", success=None)
         try:
             photo_path = await save_image(form.get("photo"), settings.upload_dir)
         except ValueError as exc:
@@ -182,24 +213,24 @@ async def submit_report(request: Request):
             disaster_id=disaster_id,
             kind="missing_report",
             name=name,
-            name_ne=str(form.get("name_ne") or "").strip() or None,
-            age=parse_int(form.get("age")),
-            gender=str(form.get("gender") or "").strip() or None,
+            name_ne=str(form.get("name_ne") or "").strip()[:255] or None,
+            age=age,
+            gender=_reported_gender(form.get("gender")),
             photo_path=photo_path,
-            residential_address_private=str(form.get("residential_address") or "").strip() or None,
+            residential_address_private=str(form.get("residential_address") or "").strip()[:2000] or None,
             last_seen_date=parse_date(form.get("last_seen_date")),
             last_seen_time=parse_time(form.get("last_seen_time")),
             last_seen_location=last_seen_location,
             last_seen_lat=point.lat if point else None,
             last_seen_lon=point.lon if point else None,
-            clothing=str(form.get("clothing") or "").strip() or None,
-            identification_details=str(form.get("identification_details") or "").strip() or None,
-            public_contact_number=str(form.get("public_contact_number") or "").strip() or None,
-            reporter_name_private=str(form.get("reporter_name") or "").strip() or None,
-            reporter_phone_private=str(form.get("reporter_phone") or "").strip() or None,
-            reporter_relationship=str(form.get("reporter_relationship") or "").strip() or None,
+            clothing=str(form.get("clothing") or "").strip()[:2000] or None,
+            identification_details=str(form.get("identification_details") or "").strip()[:3000] or None,
+            public_contact_number=str(form.get("public_contact_number") or "").strip()[:80] or None,
+            reporter_name_private=str(form.get("reporter_name") or "").strip()[:255] or None,
+            reporter_phone_private=str(form.get("reporter_phone") or "").strip()[:80] or None,
+            reporter_relationship=str(form.get("reporter_relationship") or "").strip()[:100] or None,
             social_url=social_url,
-            notes=str(form.get("notes") or "").strip() or None,
+            notes=str(form.get("notes") or "").strip()[:5000] or None,
         )
         db.add(submission)
         db.commit()
@@ -228,6 +259,8 @@ def info_form(request: Request, case_number: str):
 
 @router.post("/person/{case_number}/information", response_class=HTMLResponse)
 async def info_submit(request: Request, case_number: str):
+    if not _public_submission_allowed(request, "information"):
+        return HTMLResponse("Too many submissions from this connection. Please wait a few minutes before trying again.", status_code=429)
     form = await request.form()
     with SessionLocal() as db:
         person = db.scalar(

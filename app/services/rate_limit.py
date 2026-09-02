@@ -25,3 +25,4 @@ class SlidingWindowLimiter:
 
 
 admin_login_limiter = SlidingWindowLimiter(limit=8, window_seconds=15 * 60)
+public_submission_limiter = SlidingWindowLimiter(limit=10, window_seconds=15 * 60)

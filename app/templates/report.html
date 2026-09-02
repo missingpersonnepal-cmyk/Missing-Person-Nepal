@@ -1,13 +1,12 @@
 {% extends "base.html" %}
 {% block content %}
-<h1>Report a Missing Person</h1>
-<p>Provide the best information you have. A report is reviewed before it becomes public.</p>
-{% if error %}<div class="error">{{ error }}</div>{% endif %}
-{% if success %}<div class="notice">{{ success }}</div>{% endif %}
+<div class="page-heading"><div><div class="eyebrow">Secure intake</div><h1>Report a Missing Person</h1><p>Provide only information you know. A trained reviewer checks every report before anything is published.</p></div></div>
+{% if error %}<div class="error" role="alert">{{ error }}</div>{% endif %}
+{% if success %}<div class="notice" role="status">{{ success }}</div>{% endif %}
 <form method="post" enctype="multipart/form-data" class="card" id="report-form">
   <label>Disaster *</label><select name="disaster_id" required>{% for d in disasters %}<option value="{{ d.id }}">{{ d.name }}</option>{% endfor %}</select>
-  <div class="inline"><div><label>Full name *</label><input name="name" required></div><div><label>Name in Nepali</label><input name="name_ne"></div></div>
-  <div class="inline"><div><label>Age</label><input name="age" type="number" min="0" max="120"></div><div><label>Gender</label><input name="gender"></div></div>
+  <div class="inline"><div><label>Full name *</label><input name="name" autocomplete="name" maxlength="255" required></div><div><label>Name in Nepali</label><input name="name_ne" maxlength="255"></div></div>
+  <div class="inline"><div><label>Age</label><input name="age" type="number" min="0" max="120" inputmode="numeric"></div><div><label>Gender, if explicitly known</label><select name="gender"><option value="">Not provided</option><option value="Male">Male</option><option value="Female">Female</option></select></div></div>
   <label>Recent photo</label><input name="photo" type="file" accept="image/jpeg,image/png,image/webp">
   <label>Residential address (private/admin only)</label><textarea name="residential_address"></textarea>
   <div class="inline"><div><label>Last-seen date</label><input name="last_seen_date" type="date"></div><div><label>Last-seen time</label><input name="last_seen_time" type="time"></div></div>
@@ -17,9 +16,10 @@
   <label>Clothing last worn</label><textarea name="clothing"></textarea>
   <label>Identification details</label><textarea name="identification_details" placeholder="Height, build, glasses, scars, carried items, etc."></textarea>
   <label>Public contact number for information</label><input name="public_contact_number">
-  <label>Existing public social-media/source link</label><input name="social_url" type="url" placeholder="https://facebook.com/..."><hr>
+  <label>Existing public social-media/source link</label><input name="social_url" type="url" inputmode="url" placeholder="https://facebook.com/..."><hr>
   <div class="inline"><div><label>Your name (private)</label><input name="reporter_name"></div><div><label>Your phone (private)</label><input name="reporter_phone"></div><div><label>Relationship</label><input name="reporter_relationship"></div></div>
   <label>Additional notes</label><textarea name="notes"></textarea>
+  <p class="muted">Private contact details and residential address are visible only to authorized reviewers. Do not upload photos or information you do not have permission to share.</p>
   <p id="report-sync-status" class="muted" role="status"></p>
   <button type="submit">Submit report</button>
 </form>
