@@ -19,6 +19,5 @@ def test_ready_endpoint_reports_database_failure(monkeypatch, client):
 
     monkeypatch.setattr(app.main, "check_database_ready", lambda: (False, "timeout"))
     response = client.get("/ready")
-    assert response.status_code == 200
-    assert response.json()["status"] == "degraded"
-    assert response.json()["database"] == "down"
+    assert response.status_code == 503
+    assert response.json() == {"status": "degraded", "database": "down"}
