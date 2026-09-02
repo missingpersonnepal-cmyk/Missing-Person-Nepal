@@ -1,6 +1,8 @@
 from __future__ import annotations
 
 from fastapi import APIRouter, HTTPException, Query
+from math import cos, radians
+
 from sqlalchemy import func, or_, select
 from sqlalchemy.orm import selectinload
 
@@ -100,6 +102,7 @@ def people(
     q: str = Query(default="", max_length=120),
     status: str = Query(default="missing", max_length=20),
     limit: int = Query(default=100, ge=1, le=250),
+    offset: int = Query(default=0, ge=0, le=10_000),
 ):
     with SessionLocal() as db:
         stmt = (
@@ -122,7 +125,7 @@ def people(
                     MissingPerson.last_seen_location.ilike(pattern),
                 )
             )
-        rows = db.scalars(stmt.limit(limit)).all()
+        rows = db.scalars(stmt.offset(offset).limit(limit)).all()
         state_rows = db.scalars(select(PersonCaseState).where(PersonCaseState.person_id.in_([p.id for p in rows]))).all()
         state_map = {row.person_id: row.status for row in state_rows}
         return [person_payload(p, case_status=state_map.get(p.id, "missing")) for p in rows]
@@ -161,12 +164,19 @@ def nearby(
         return 2 * r * asin(sqrt(sa))
 
     with SessionLocal() as db:
+        # Reduce the candidate set in the database first; the exact haversine
+        # check below remains authoritative near the bounding-box edges.
+        lat_delta = radius_km / 111.0
+        lon_scale = max(abs(cos(radians(lat))), 0.1)
+        lon_delta = radius_km / (111.0 * lon_scale)
         rows = db.scalars(
             select(MissingPerson).where(
                 MissingPerson.published.is_(True),
                 MissingPerson.archived.is_(False),
                 MissingPerson.last_seen_lat.is_not(None),
                 MissingPerson.last_seen_lon.is_not(None),
+                MissingPerson.last_seen_lat.between(lat - lat_delta, lat + lat_delta),
+                MissingPerson.last_seen_lon.between(lon - lon_delta, lon + lon_delta),
             )
         ).all()
         items = []

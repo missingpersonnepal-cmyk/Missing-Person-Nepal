@@ -29,3 +29,24 @@ def test_public_api_excludes_private_fields(client):
     assert "residential_address_private" not in payload
     assert "private_contact_number" not in payload
     assert payload["sources"][0]["url"] == "https://facebook.com/post/1"
+
+
+def test_people_api_supports_bounded_pagination(client):
+    with SessionLocal() as db:
+        disaster = Disaster(code="PG", name="Pagination", disaster_type="flood", start_date=date(2026, 8, 26))
+        db.add(disaster)
+        db.flush()
+        db.add(MissingPerson(
+            case_number="NP-2026-PG-00001",
+            disaster_id=disaster.id,
+            name="Pagination Person",
+            last_seen_location="Rasuwa",
+            published=True,
+        ))
+        db.commit()
+
+    response = client.get("/api/v1/people?limit=1&offset=0")
+
+    assert response.status_code == 200
+    assert len(response.json()) == 1
+    assert client.get("/api/v1/people?limit=1&offset=1").json() == []
