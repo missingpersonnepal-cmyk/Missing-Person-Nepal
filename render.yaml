@@ -33,6 +33,14 @@ services:
         value: disabled
       - key: GEO_API_BASE_URL
         value: https://merogeo.com
+      # Keep Supabase Storage private. These variables document the planned
+      # object-storage migration; the application does not expose their values.
+      - key: SUPABASE_URL
+        sync: false
+      - key: SUPABASE_SERVICE_ROLE_KEY
+        sync: false
+      - key: SUPABASE_STORAGE_BUCKET
+        sync: false
       - key: SESSION_SECRET
         sync: false
       - key: ADMIN_USERNAME

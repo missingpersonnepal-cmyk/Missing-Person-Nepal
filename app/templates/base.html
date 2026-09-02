@@ -36,6 +36,7 @@
     <a href="/admin/discovery">Discovery Bot</a>
     <a href="/admin/export">Export</a>
     <a href="/admin/help">Help & Training</a>
+    {% if admin_role in ['super_admin', 'admin'] %}<a href="/admin/operations">Operations</a>{% endif %}
     {% if admin_role == 'super_admin' %}<a href="/admin/users">Users</a>{% endif %}
     <form method="post" action="/admin/logout" style="display:inline"><button class="secondary" type="submit">Logout</button></form>
   </div>

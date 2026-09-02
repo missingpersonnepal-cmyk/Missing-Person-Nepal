@@ -45,9 +45,9 @@ Only an authenticated admin can export. Use the event-specific XLSX for authorit
 
 Every export generates an audit-log entry. The export may include admin-only residential/private contact fields and must therefore be handled as restricted operational data, not published as a public download.
 
-## Backup
+## Backup and restore ownership
 
-For the review-stage V0, rely on the existing Supabase backup policy plus a periodic restricted admin export for operational portability. Before public production, define and test a database restore and media/object-storage backup procedure. Keep one encrypted export in an authorized storage location, verify a restore in an isolated environment quarterly, and record the result in the operational handover log.
+For the review-stage V0, rely on the existing Supabase backup policy plus a periodic restricted admin export for operational portability. Before public production, assign an accountable owner for backups and restore tests, then define and test a database restore and media/object-storage backup procedure. Keep one encrypted export in an authorized storage location, verify a restore in an isolated environment quarterly, and record the result in the operational handover log.
 
 ## Retention and privacy
 
@@ -56,6 +56,12 @@ Keep public case data only while it is operationally necessary. Review unresolve
 ## Current filesystem storage caveat
 
 Photos are stored on the application filesystem in V0. Raw upload storage is not publicly mounted: pending/rejected photos are admin-only and published case photos are served through a case authorization check. Filesystem storage is acceptable for local/review use but must be replaced by persistent object storage before horizontally scaled or ephemeral production deployment.
+
+The Render blueprint accepts `SUPABASE_URL`, `SUPABASE_SERVICE_ROLE_KEY`, and `SUPABASE_STORAGE_BUCKET` so the deployment can be prepared without committing credentials. These are not a completed migration: do not mark media as persistent until uploads, reads, deletes, and recovery testing all use a private bucket.
+
+## Authority delivery integration
+
+SMS and email notifications are intentionally fail-closed. The system records subscriptions and a private notification outbox, but marks delivery as skipped until a vetted provider adapter is implemented and configured with authority-approved credentials. Do not claim that an SOS or family notification has been delivered based only on an outbox entry. Use the Operations page to verify the live state before an operational shift.
 
 ## Security before live use
 

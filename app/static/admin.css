@@ -28,3 +28,15 @@
 .panic-button { background:#b42318!important; font-size:1.05rem; min-height:50px; }
 .emergency-card { border-top:5px solid #b42318; max-width:720px; }
 .panic-actions { margin-top:20px; padding-top:16px; border-top:1px solid #ead2d0; }
+.readiness-grid { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:14px; margin-bottom:24px; }
+.readiness-card { border-top:4px solid var(--line); }
+.readiness-card--ready { border-top-color:var(--forest); }
+.readiness-card--follow_up { border-top-color:#c98200; }
+.readiness-card--blocked { border-top-color:#b42318; }
+.readiness-card__heading { display:flex; gap:12px; align-items:center; justify-content:space-between; }
+.readiness-card__heading h2 { margin:0; font-size:1.1rem; }
+.badge--ready { background:#dcefe4; color:#14532d; }
+.badge--follow_up { background:#fff0ce; color:#825800; }
+.badge--blocked { background:#fee2e2; color:#991b1b; }
+.operations-checklist { max-width:900px; }
+@media (max-width:560px) { .readiness-grid { grid-template-columns:1fr; } }

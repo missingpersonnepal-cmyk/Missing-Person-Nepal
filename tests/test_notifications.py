@@ -86,7 +86,8 @@ def test_status_change_enqueues_once_and_disabled_provider_skips(admin_client):
         assert rows[0].event_type == "FOUND_ALIVE"
         assert "has been found" in rows[0].body
         assert drain_pending_notifications(db)["skipped"] == 1
-        assert rows[0].status == "pending"
+        assert rows[0].status == "skipped"
+        assert rows[0].last_error == "SMS provider is not configured"
 
 
 def test_identified_and_case_update_wording_is_neutral(admin_client):
@@ -223,4 +224,3 @@ def test_same_raw_key_is_namespaced_by_event_type():
             "CASE_UPDATED:event-001",
             "IDENTIFIED_DECEASED:event-001",
         }
-

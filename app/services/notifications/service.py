@@ -185,12 +185,16 @@ def drain_pending_notifications(db: Session, limit: int = 25) -> dict[str, int]:
             if row.channel == "sms":
                 provider = get_sms_provider()
                 if not provider.configured:
+                    row.status = "skipped"
+                    row.last_error = "SMS provider is not configured"
                     skipped += 1
                     continue
                 result = provider.send(subscription.destination, row.body)
             else:
                 provider = get_email_provider()
                 if not provider.configured:
+                    row.status = "skipped"
+                    row.last_error = "Email provider is not configured"
                     skipped += 1
                     continue
                 result = provider.send(subscription.destination, row.subject or "Missing Persons Hub update", row.body)

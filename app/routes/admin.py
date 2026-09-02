@@ -68,6 +68,7 @@ from ..services.case_priority import case_priority
 from ..services.rate_limit import admin_login_limiter
 from ..services.share_cards import build_share_card
 from ..services.jobs import get as get_job, submit as submit_job
+from ..services.operational_readiness import operational_readiness
 from .common import admin_gate, audit, current_admin, next_case_number, parse_date, parse_int, parse_time, render, role_gate, write_gate
 
 router = APIRouter()
@@ -695,6 +696,14 @@ def admin_help_manual(request: Request):
         media_type="application/vnd.openxmlformats-officedocument.presentationml.presentation",
         filename="user_manual_bilingual.pptx",
     )
+
+
+@router.get("/admin/operations", response_class=HTMLResponse)
+def admin_operations(request: Request):
+    gate = role_gate(request, {"super_admin", "admin"})
+    if gate:
+        return gate
+    return render(request, "admin_operations.html", checks=operational_readiness())
 
 
 @router.get("/admin/events", response_class=HTMLResponse)

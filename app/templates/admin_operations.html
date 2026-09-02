@@ -1,0 +1,35 @@
+{% extends "base.html" %}
+{% block title %}Operational Readiness | Nepal Missing Persons Hub{% endblock %}
+{% block content %}
+<div class="page-heading">
+  <div>
+    <div class="eyebrow">Restricted operations</div>
+    <h1>Operational Readiness</h1>
+    <p class="muted">Live, non-secret checks for the service. This page never displays passwords, API keys, or contact details.</p>
+  </div>
+</div>
+
+<section class="readiness-grid" aria-label="Operational readiness checks">
+  {% for check in checks %}
+  <article class="card readiness-card readiness-card--{{ check.status }}">
+    <div class="readiness-card__heading">
+      <h2>{{ check.name }}</h2>
+      <span class="badge badge--{{ check.status }}">{{ check.status | replace('_', ' ') | title }}</span>
+    </div>
+    <p>{{ check.detail }}</p>
+  </article>
+  {% endfor %}
+</section>
+
+<section class="card operations-checklist">
+  <div class="eyebrow">Before authority handover</div>
+  <h2>Required operational confirmations</h2>
+  <ol class="checklist">
+    <li>Assign an accountable owner for database backup, restore testing, and retention decisions.</li>
+    <li>Migrate case photos to a private persistent object-storage bucket and test recovery after redeploy.</li>
+    <li>Configure approved SMS/email authority providers and complete a documented test delivery.</li>
+    <li>Confirm reviewers understand that AI output and public-source results require human verification before publishing.</li>
+  </ol>
+  <p class="muted">Detailed procedures are in <code>docs/OPERATIONS.md</code> and <code>docs/SECURITY_AND_SAFETY.md</code>.</p>
+</section>
+{% endblock %}
