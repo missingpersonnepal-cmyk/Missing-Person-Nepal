@@ -10,6 +10,8 @@ The project is designed to use an existing **Supabase PostgreSQL** database thro
 
 The system is not a police complaint system and does not make an official determination that a person is missing. Social-media links prove where a report came from, not that the report is officially verified.
 
+Read [Security and Data-Safety Operations](docs/SECURITY_AND_SAFETY.md) before configuring production access or publishing a case.
+
 ## What V0 includes
 
 - Disaster/event setup with affected-location terms.

@@ -10,6 +10,7 @@
   <script src="/static/vendor/leaflet/leaflet.js"></script>
 </head>
 <body>
+<a class="skip-link" href="#main-content">Skip to main content</a>
 <header>
   <div class="container site-header">
     <a class="brand" href="/"><span class="brand-mark">N</span><span class="brand-text">Nepal Missing Persons Hub</span></a>
@@ -24,7 +25,7 @@
     </nav>
   </div>
 </header>
-<main class="container">
+<main id="main-content" class="container" tabindex="-1">
   {% if request.session.get('admin') %}
   <div class="admin-nav">
     <a href="/admin">Dashboard</a>
